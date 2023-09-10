@@ -4,6 +4,7 @@
 ## Last updated on: 2023-09-10
 
 #### load libraries ########
+library(googlesheets4)
 library(tidyverse)
 library(here)
 library(lubridate)
@@ -34,7 +35,7 @@ PP_long <- PP_long %>%
                names_to = "parameter",
                values_to = "mean_parameter") %>%
   select(Year, Month, parameter, mean_parameter)
-View(PP_long)
+
 
 PP_long_se <- PP_edit %>% 
   filter(Site=="LTER 1") %>% 
@@ -99,7 +100,7 @@ PP_long_plot <- PP_long %>%
   drop_na(mean_parameter)%>%
   ggplot(aes(x=Year, 
              y=mean_parameter)) + 
-  facet_wrap(~parameter*Month, ncol = 2, scales = "fixed", labeller=as_labeller(rename)) + 
+  facet_wrap(~parameter*Month, ncol = 2, scales = "fixed", labeller=as_labeller(renamePP)) + 
   geom_smooth(method = "lm", color="coral3") + 
   geom_point(size=1) +
   geom_vline(xintercept=vertical.lines, color="coral1", linetype="dashed") +
@@ -126,7 +127,7 @@ NEC_long_plot <- PP_long %>%
   drop_na(mean_parameter)%>%
   ggplot(aes(x=Year, 
              y=mean_parameter)) + 
-  facet_wrap(~parameter*Month, ncol = 2, scales = "fixed", labeller=as_labeller(rename)) + 
+  facet_wrap(~parameter*Month, ncol = 2, scales = "fixed", labeller=as_labeller(renameNEC)) + 
   geom_smooth(method = "lm", color="coral3") + 
   geom_point(size=1) +
   geom_vline(xintercept=vertical.lines, color="coral1", linetype="dashed") +
@@ -154,13 +155,13 @@ BC_long_plot <- sum_BC %>%
   ggplot(aes(x=Year, 
              y=mean)) + 
   facet_wrap(~benthic, ncol = 2, scales = "fixed") + 
-  geom_smooth(method = "lm", color="coral3") + 
+  geom_smooth(method = "lm", formula = "y~poly(x,2)", color="coral3") + 
   geom_point(size=1) +
   geom_vline(xintercept=vertical.lines, color="coral1", linetype="dashed") +
   theme_bw() + 
   theme(strip.background = element_rect(fill = "white")) +
   theme(strip.text = element_text(size=10, face="bold")) +
-  #labs(title = "Time Series Analysis of Productivty Parameters by Season")+ 
+  #labs(title = "Time Series Analysis of Productivity Parameters by Season")+ 
   ylab("Percent Benthic Cover") +
   scale_x_continuous(breaks = pretty_breaks(n=3)) +
   xlim(2007, 2023) +
