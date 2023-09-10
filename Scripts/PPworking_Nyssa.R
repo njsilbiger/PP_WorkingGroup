@@ -24,6 +24,14 @@ PP<-read_sheet("https://docs.google.com/spreadsheets/d/1dl085D-DqLS5M1LfWZ60QpDH
 BenthicCover <- read_sheet('https://docs.google.com/spreadsheets/d/1iA8rP_raCQ8NTPUGqAZ6LVeYza7eKqU4ep6yucpj1U0/edit?usp=sharing')%>%
   mutate_at(vars(coral:sub_squares), .funs = as.numeric)
 
+## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
+
+Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
+
+# Bring together PP and deployment physics data
+PP <- PP %>%
+  left_join(Physics_deploy)
+
 ### look at relationship between NEP and NEC over time ###
 
 PP %>% 
@@ -177,3 +185,20 @@ MacroGPP<-LTER1 %>%
 
 CoralGPP/MacroGPP
 ggsave(here("Output","GPP_coralMacro.png"), width = 10, height = 10)
+
+
+### Plot GPP~ Temp, Light, Flow etc
+LTER1 %>%
+  ggplot(aes(x = TotalPAR_mean, y = daily_GPP))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+LTER1 %>%
+  ggplot(aes(x = Flow_mean, y = daily_GPP))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+LTER1 %>%
+  ggplot(aes(x = Temp_mean, y = daily_GPP))+
+  geom_point()+
+  geom_smooth(method = "lm")
