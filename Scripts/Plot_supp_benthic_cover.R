@@ -1,5 +1,7 @@
 ### Supplemental Benthic Cover
-
+## Created on: 2023-09-10
+## Created by: Danielle Barnas
+## Last updated on: 2023-09-10
 
 ### LOAD LIBRARIES
 library(tidyverse)
@@ -14,14 +16,6 @@ library(patchwork)
 # Benthic Cover data
 BenthicCover <- read_sheet('https://docs.google.com/spreadsheets/d/1iA8rP_raCQ8NTPUGqAZ6LVeYza7eKqU4ep6yucpj1U0/edit?usp=sharing')
 # Patches are dispersed around reef, unrelated to upstream and downstream and surveyed radially
-
-# CHN Turbinaria
-CHN<-read_sheet("https://docs.google.com/spreadsheets/d/18BCnI9u5h4pOQ3n0RCT00TSRcqvBYsP7OQsmFmAGjac/edit?usp=sharing")
-
-## Temperature LTER 1
-Temp_LTER1<-read_sheet("https://docs.google.com/spreadsheets/d/1YJRyNAeo03xLoThBGX2-BtHpWqUpYXIarmYTsIhw5aI/edit?usp=sharing")
-
-
 
 
 ### CLEAN DATA
@@ -71,7 +65,7 @@ sum_BC %>%
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(size=10, face="bold"))
 
-
+# regressions
 anova(lm(data = summaryBC, coral ~ poly(Year,2)))
 anova(lm(data = summaryBC, ctb ~ poly(Year,2)))
 anova(lm(data = summaryBC, macroalgae ~ Year))
@@ -79,10 +73,10 @@ anova(lm(data = summaryBC, millepora ~ poly(Year,2)))
 anova(lm(data = summaryBC, sand ~ poly(Year,2)))
 
 
-## STACKED BAR PLOT
+## STACKED BAR PLOT (Supplemental Figure)
 
+# customize palette
 myPal <- c(coral = "#c38370", macroalgae = "#9da993", millepora = "#bdc3cb", ctb = "#523a28", sand = "#d6ad60")
-
 
 BC_plot <- sum_BC %>% 
   mutate(benthic = factor(benthic, levels = c("coral", "macroalgae", "millepora", "ctb", "sand"))) %>% 
