@@ -33,6 +33,13 @@ PP %>%
   geom_point(aes(x = Year, y = night_NEC), color = "black")+
   facet_wrap(~Month)
 
+PP %>% 
+  filter(Site == "LTER 1") %>%
+  ggplot(aes(x = Year, y = daily_NEC-night_NEC))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month, scales = "free")
+
 ## NEC/NEC for day
 PP %>% 
   filter(Site == "LTER 1",
@@ -108,7 +115,7 @@ LTER1 %>%
 #  geom_phylopic(aes(x = 40, y = 2000), img = img,
  #               color = "purple", size = 0.25)+
   labs(x = "% Benthic Cover",
-       y = expression(paste("Daily GPP (mmol O"^2, " m"^-2, " d"^-1,")")))+
+       y = expression(paste("Daily GPP (mmol O", " m"^-2, " d"^-1,")")))+
   theme_bw()+
   facet_wrap(~Benthos*Month, ncol = 2)+
   theme(strip.background = element_blank())
