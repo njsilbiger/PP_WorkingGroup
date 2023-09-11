@@ -9,6 +9,9 @@ library(tidyverse)
 library(rphylopic)
 library(patchwork)
 library(here)
+library(performance)
+library(effectsize)
+library(interactions)
 
 ## Read in the different data sheets ####
 #Read google sheets data into R.
@@ -194,6 +197,11 @@ LTER1 %>%
   geom_smooth(method = "lm")
 
 LTER1 %>%
+  ggplot(aes(x = TotalPAR_mean, y = daily_NEC))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+LTER1 %>%
   ggplot(aes(x = Flow_mean, y = daily_GPP))+
   geom_point()+
   geom_smooth(method = "lm")
@@ -202,3 +210,94 @@ LTER1 %>%
   ggplot(aes(x = Temp_mean, y = daily_GPP))+
   geom_point()+
   geom_smooth(method = "lm")
+
+#### Model 
+
+## Calculate residuals to remove effect of light on GPP and NEC
+modLight<-lm(daily_GPP~TotalPAR_mean, data = LTER1, na.action = na.exclude)
+anova(modLight)
+GPP_light<-residuals(modLight)
+
+modLight_NEC<-lm(daily_NEC~TotalPAR_mean, data = LTER1, na.action = na.exclude)
+anova(modLight_NEC)
+NEC_light<-residuals(modLight_NEC)
+
+## Add the residuals to the dataframe
+LTER1<-LTER1 %>%
+  ungroup() %>%
+  mutate(GPP_light = GPP_light,
+         NEC_light = NEC_light)
+# standardize the predictor variables
+LTER<-LTER1 %>%
+  ungroup()%>%
+  mutate_at(vars(TotalPAR_mean, Temp_mean, Flow_mean, coral, daily_GPP, daily_NEC, daily_R, night_NEC,GPP_light,NEC_light, logratio), .funs = scale)%>%
+  mutate_at(vars(TotalPAR_mean, Temp_mean, Flow_mean, coral, daily_GPP, daily_NEC, daily_R, night_NEC,GPP_light,NEC_light, logratio), .funs = as.numeric)
+
+# raw model
+#mod_GPP<-lm(daily_GPP~coral*(Flow_mean+Temp_mean+TotalPAR_mean), data = LTER1)
+mod_GPP<-lm(daily_GPP~(coral*Temp_mean)+TotalPAR_mean, data = LTER1)
+
+#mod_NEC<-lm(daily_NEC~coral*(Flow_mean+Temp_mean+TotalPAR_mean), data = LTER1)
+mod_NEC<-lm(daily_NEC~(coral*Temp_mean)+TotalPAR_mean, data = LTER1)
+
+mod_GPPNEC<-lm(NEC_NEP~coral*(Flow_mean+Temp_mean+TotalPAR_mean), data = LTER1)
+mod_R<-lm(-daily_R~coral*Month, data = LTER1)
+mod_NED<-lm(night_NEC~coral*Temp_mean, data = LTER1)
+
+# check assumptions
+check_model(mod_GPP)
+check_model(mod_NEC)
+check_model(mod_GPPNEC)
+check_model(mod_R)
+
+anova(mod_GPP)
+summary(mod_GPP)
+
+anova(mod_NEC)
+summary(mod_NEC)
+
+anova(mod_GPPNEC)
+summary(mod_GPPNEC)
+
+anova(mod_R)
+summary(mod_R)
+
+anova(mod_NED)
+summary(mod_NED)
+
+## residual model accounting for light
+mod_GPP_R<-lm(GPP_light~coral*(Flow_mean+Temp_mean), data = LTER1)
+mod_NEC_R<-lm(NEC_light~coral*(Flow_mean+Temp_mean), data = LTER1)
+
+# check assumptions
+check_model(mod_GPP_R)
+check_model(mod_NEC_R)
+
+#anova
+anova(mod_GPP_R)
+anova(mod_NEC_R)
+
+#summary
+summary(mod_GPP_R)
+summary(mod_NEC_R)
+
+
+p1_GPP<-interact_plot(mod_GPP, pred = coral, modx = Temp_mean, interval = TRUE,modx.values = c(27,29))
+
+interact_plot(mod_R, pred = coral, modx = Month, interval = TRUE, plot.points = TRUE)
+
+# plot residuals
+p2_GPP<-LTER1 %>%
+  ggplot(aes(y = daily_GPP, x = TotalPAR_mean ))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  theme_bw()
+  
+p2_GPP+p1_GPP&lims(y = c(0,3000))
+
+LTER1 %>%
+  filter(Year != 2015)%>%
+  ggplot(aes(x = logratio, y = NEC_NEP))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)
