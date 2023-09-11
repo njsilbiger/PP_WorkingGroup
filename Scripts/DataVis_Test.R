@@ -200,21 +200,20 @@ BenthicCover <- read_sheet('https://docs.google.com/spreadsheets/d/1iA8rP_raCQ8N
 BC_edit <- BenthicCover %>% 
   mutate_at(vars(coral:ctb), .funs=as.numeric) 
 
-sum_BC <- BC_edit %>% 
+mean_BC <- BC_edit %>% 
   filter(Site == "LTER 1") %>% 
-  group_by(Year) %>% # not by patch
-  summarise_at(.vars = vars(coral:ctb), .funs = c(mean, plotrix::std.error), na.rm = TRUE)
-
-mean_BC <- sum_BC %>% 
-  select(Year:macroalgae_fn1) %>% 
-  rename(Coral = coral_fn1,
-         Macroalgae = macroalgae_fn1) %>% 
+  group_by(Year) %>% 
+  summarise_at(.vars = vars(coral:macroalgae), .funs = mean, na.rm = TRUE) %>% 
+  rename(Coral = coral,
+         Macroalgae = macroalgae) %>% 
   pivot_longer(cols = Coral:Macroalgae, names_to = "benthic", values_to = "mean")
 
-se_BC <- sum_BC %>% 
-  select(Year, coral_fn2, macroalgae_fn2) %>% 
-  rename(Coral = coral_fn2,
-         Macroalgae = macroalgae_fn2) %>% 
+se_BC <- BC_edit %>% 
+  filter(Site == "LTER 1") %>% 
+  group_by(Year) %>%
+  summarise_at(.vars = vars(coral:macroalgae), .funs = plotrix::std.error, na.rm = TRUE) %>% 
+  rename(Coral = coral,
+         Macroalgae = macroalgae) %>% 
   pivot_longer(cols = Coral:Macroalgae, names_to = "benthic", values_to = "SE")
 
 # dataframe with mean and standard error values of percent cover of coral and macroalgae per year
