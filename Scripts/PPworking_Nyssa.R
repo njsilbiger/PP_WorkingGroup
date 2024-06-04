@@ -97,13 +97,16 @@ LTER1_cover<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"),
          Site == "LTER 1")%>%
   ggplot(aes(x = Year, y = mean_cover, color = name))+
-  geom_point()+
-  geom_line()+
+#  geom_point()+
+  geom_line(size = 1)+
+  scale_color_manual(values = c("#CC7161","lightpink","darkgreen"))+
   labs(x = "",
        y = "Percent Cover",
        color = "",
        title = "LTER 1 only")+
-  theme_bw()
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
 
 All_cover<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
@@ -111,16 +114,31 @@ All_cover<-Benthic_summary_Algae %>%
   summarise(mean_all = mean(mean_cover, na.rm = TRUE),
             se_all = sd(mean_cover, na.rm = TRUE)/sqrt(n()))%>%
   ggplot(aes(x = Year, y = mean_all, color = name))+
-  geom_point()+
-  geom_errorbar(aes(ymin = mean_all-se_all, ymax = mean_all+se_all), width = 0.1)+
-  geom_line()+
+  geom_ribbon(aes(ymin = mean_all-se_all, ymax = mean_all+se_all, fill = name), alpha = 0.5, linetype = 0)+
+#  geom_point()+
+  #geom_errorbar(aes(ymin = mean_all-se_all, ymax = mean_all+se_all), width = 0.1)+
+  geom_line(size = 1, show.legend = FALSE)+
+  scale_color_manual(values = c("#CC7161","lightpink","darkgreen"))+
+  scale_fill_manual(values = c("#CC7161","lightpink","darkgreen"))+
   labs(x = "",
-       y = "Percent Cover",
+       y = "",
        color = "",
+       fill = "",
        title = "Mean across all 6 LTER sites")+
-  theme_bw()
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
   
 LTER1_cover+ theme(legend.position = "none")|All_cover+ plot_layout(guides = "collect")
+
+ggsave(here("Output","BenthicCoverAll.pdf"), width = 8, height = 4)
+
+## Calculate the total percent of calcifiers
+Total_Calc<-Benthic_summary_Algae %>%
+  filter(name %in% c("Coral","Crustose Corallines"))%>%
+  group_by(Year, Site)%>%
+  reframe(total_Calc = mean_cover[name == "Coral"]+
+            mean_cover[name == "Crustose Corallines"])
 
 ## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
 
@@ -128,20 +146,24 @@ Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
 
 # Bring together PP and deployment physics data
 PP <- PP %>%
-  left_join(Physics_deploy)
+  left_join(Physics_deploy)%>%
+  left_join(Total_Calc %>%
+              filter(Site %in% c("LTER 1","LTER 2"))) # bring in total calc data
 
 ### look at relationship between NEP and NEC over time ###
 
 PP_long<-PP %>% 
   filter(Site == "LTER 1") %>%
-  drop_na(daily_NEC)%>%
+  #drop_na(daily_NEC)%>%
   select(Month, Year, NEC = daily_NEC, SE = daily_NEC_SE, NEP = daily_GPP, SE_NEP = GPP_SE)%>%
   mutate(Day_Night = "Day") %>%
   bind_rows(PP %>% 
               filter(Site == "LTER 1") %>%
-              drop_na(daily_NEC)%>%
+            #  drop_na(daily_NEC)%>%
               select(Month, Year, NEC = night_NEC, SE = night_NEC_SE,NEP = daily_R, SE_NEP = R_SE)%>%
-              mutate(Day_Night = "Night")) 
+              mutate(Day_Night = "Night")) %>%
+  left_join(Total_Calc%>%
+              filter(Site =="LTER 1")) # b
 
 NEC_plot<-PP_long %>%  
 ggplot(aes(x = Year, y = NEC, color = Day_Night))+
@@ -161,7 +183,7 @@ NEC_plot/NEP_plot
 
 PP %>% 
   filter(Site == "LTER 1") %>%
-  drop_na(daily_NEC)%>%
+ # drop_na(daily_NEC)%>%
   ggplot(aes(x = Year, y = daily_NEC-night_NEC))+
   geom_point()+
   labs(y = "Net Calcification")+
@@ -189,6 +211,14 @@ PP %>%
   facet_wrap(~Month)
 
 ## NEP/NEC ratio decreases over time in the summer, but not winter
+
+#### plots with Bob's benthic data
+PP_long %>%
+  ggplot(aes(x = total_Calc, y = NEC, color = Day_Night))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)
+
 
 ### Look at the ratio of coral to algae vs NEP and NEC
 Benthic_summary<-BenthicCover %>%
@@ -309,8 +339,23 @@ anova(RMod)
 
 (NC/ND)&theme_bw()|(GP/R)&theme_bw()
 
+ggplot(LTER1, aes(x = Year, y = PR,color = Month))+
+  geom_point()+
+  geom_smooth(method = "lm")
 #Both GPP and R shrink regardless of month
 
+# Average all by year
+LTER1 %>%
+  select(!Month)%>%
+  group_by(Year)%>%
+  summarise_if(.predicate = is.numeric,.funs = function(x){mean(x, na.rm = TRUE)})%>%
+  ggplot(aes(x = Year, y = daily_GPP))+
+  geom_point()
+  
+
+
+####
+ # MAKE A PLOT COMPARING ESTIMATES OF CHANGE OVER TIME HERE TO OTHER DATASETS AROUND THE WORLD
 
 ### GPP ~ coral cover, NEC ~ GPP, Show coral cover decline across all 6 sites to show consistency in trend
 ## NEC and dissolution are dependent on season
