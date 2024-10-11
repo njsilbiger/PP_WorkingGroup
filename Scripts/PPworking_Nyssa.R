@@ -253,6 +253,7 @@ Benthic_summary %>%
   pivot_longer(coral:ctb) %>%
   filter(name != "ctb") %>%
   mutate(name = ifelse(name == "coral","Coral","Macroalgae"))%>%
+  mutate(Site = factor(Site, levels = c("West \nShore","North \nShore")))%>%
   ggplot(aes(x = Site, y = value, fill = name))+
   geom_col()+
   labs(x = "",
@@ -261,9 +262,11 @@ Benthic_summary %>%
   scale_fill_manual(values = c("coral","darkgreen"))+
   theme_minimal()+
   theme(axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14))
+        axis.text = element_text(size = 14),
+        legend.position = "top")
 
-ggsave(here("Output","PercentCover_NSF.png"))
+ggsave(here("Output","PercentCover_NSF.png"),
+       width = 3.5, height = 5.3)
 
 Benthic_summary %>%
 full_join(PP)  %>%
