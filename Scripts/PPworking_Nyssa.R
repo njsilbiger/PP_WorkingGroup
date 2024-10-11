@@ -244,6 +244,27 @@ Benthic_summary %>%
   facet_wrap(~Site)
   
 
+# make a figure of LTER 2 and 6 for 2022
+Benthic_summary %>%
+  filter(Site %in% c("LTER 2","LTER 6"),
+         Year == 2022) %>%
+  mutate(Site = ifelse(Site == "LTER 2","North \nShore", "West \nShore"))%>%
+  select(!logratio)%>%
+  pivot_longer(coral:ctb) %>%
+  filter(name != "ctb") %>%
+  mutate(name = ifelse(name == "coral","Coral","Macroalgae"))%>%
+  ggplot(aes(x = Site, y = value, fill = name))+
+  geom_col()+
+  labs(x = "",
+       y = "% Cover",
+       fill = "")+
+  scale_fill_manual(values = c("coral","darkgreen"))+
+  theme_minimal()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))
+
+ggsave(here("Output","PercentCover_NSF.png"))
+
 Benthic_summary %>%
 full_join(PP)  %>%
   filter(Site == "LTER 1")%>%
