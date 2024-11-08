@@ -400,48 +400,149 @@ LTER1 %>%
   guides(color = "none")+
   theme_bw()
 
-GPPMod<-lmer(daily_GPP~Year + (1|Month), data = LTER1)
-anova(GPPMod)
+# GPPMod<-lmer(daily_GPP~Year + (1|Month), data = LTER1)
+# anova(GPPMod)
+# summary(GPPMod)
+
+
+### CALCULATE THE X INTERCEPT FOR ALL THE BELOW MODELS TO PREDICT WHAT YEAR IT WILL REACH 0.
+
+GPPMod<-brm(daily_GPP~Year + (1|Month), data = LTER1)
 summary(GPPMod)
+GPP_coeff<-summary(GPPMod)$fixed # pullout the fixed effects
+
+slop_GPP<-round(GPP_coeff$Estimate[2],2) #slope
+SE_GPP<-round(GPP_coeff$Est.Error[2],2) #error
+
+GPP_0_Year <- round(-GPP_coeff$Estimate[1]/GPP_coeff$Estimate[2])
+
+# GP model
+p_gp<-plot(conditional_effects(GPPMod, "Year",re_formula = NULL), ask = FALSE, points = TRUE)$Year
+
+GPP_pred<-p_gp+
+  geom_smooth(color = "black")+
+  labs(y =bquote(atop("Gross Photosynthesis",
+                      "(mmol" ~ O[2]~m^-2~d^-1~")")))+
+ # labs(y = expression(paste("Gross Photoshynthesis (mmol O"[2], " m"^-2, " d"^-1,")")))+
+  annotate("text", x = 2020, y = 2000, label = paste("GP = 0 in Year",GPP_0_Year))+
+  theme_bw()
+
+draws_GPP<-GPPMod %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+
+# calculate proportion < 0
+draws_GPP %>%
+  mutate(lessthan = ifelse(b_Year<0,1,0)) %>%
+  count(lessthan) %>%
+  reframe(prop = n[lessthan == 1]/sum(n))
+
+# probability of 1 that NEP is declining over time
+plotdata_GPP<-as_tibble(density(draws_GPP$b_Year)) %>%
+  mutate(variable = ifelse(x<0, "On","Off"))
+
+# Figure showing prosterior for R being negative
+GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) + 
+   geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_area(data = filter(plotdata_GPP, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_GPP, variable == 'On'), fill = 'light blue') +
+  geom_line(linewidth = 1.3) +
+  xlim(-100,50)+
+  annotate("text", x = 27.5, y = 0.015, label = "P(1) \n GP is declining over time")+
+  annotate("text", x = slop_GPP, y = 0.028, label = paste(slop_GPP,"\u00B1",SE_GPP))+
+  labs(x = "Change in GP per year",
+       y = "Density")+
+  theme_bw()
+
+GPPplot<-GPP_pred+GPP_dens&theme(axis.text = element_text(size = 16),
+                              axis.title = element_text(size = 18))
+
+RMod<-brm(-daily_R~Year + (1|Month), data = LTER1, iter = 4000)
+#anova(RMod)
+R_coeff<-summary(RMod)$fixed # pullout the fixed effects
+slop_R<-round(R_coeff$Estimate[2],2) #slope
+SE_R<-round(R_coeff$Est.Error[2],2) #error
+
+R_0_Year <- round(-R_coeff$Estimate[1]/R_coeff$Estimate[2]) # year at 0
+
+p_r<-plot(conditional_effects(RMod, "Year",re_formula = NULL), ask = FALSE, points = TRUE)$Year
+
+# plot the prediction from the bayesian model
+R_pred<-p_r+
+  geom_smooth(color = "black")+
+  labs(y =bquote(atop("Respiration",
+                      "(mmol" ~ O[2]~m^-2~d^-1~")")))+
+ # labs(y = expression(paste("Respiration (mmol O"[2], " m"^-2, " d"^-1,")")))+
+  annotate("text", x = 2020, y = 1300, label = paste("R = 0 in Year",R_0_Year))+
+  theme_bw()
+
+draws_R<-RMod %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+
+# calculate proportion < 0
+
+draws_R %>%
+  mutate(lessthan = ifelse(b_Year<0,1,0)) %>%
+  count(lessthan) %>%
+  reframe(prop = n[lessthan == 1]/sum(n))
+
+# probability of 0.998 that NEP is declining over time
+plotdata_R<-as_tibble(density(draws_R$b_Year)) %>%
+  mutate(variable = ifelse(x<0, "On","Off"))
 
 
-RMod<-lmer(daily_R~Year + (1|Month), data = LTER1)
-anova(RMod)
-summary(RMod)
+# Figure showing prosterior for R being negative
+R_dens<-ggplot(plotdata_R, aes(x, y)) + 
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
+  geom_area(data = filter(plotdata_R, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_R, variable == 'On'), fill = 'light blue') +
+  geom_line(linewidth = 1.3) +
+  xlim(-100,50)+
+  annotate("text", x = 27.5, y = 0.025, label = "P(0.998) \n R is declining over time")+
+  annotate("text", x = slop_R, y = 0.035, label = paste(slop_R,"\u00B1",SE_R))+
+  labs(x = "Change in R per year",
+       y = "Density")+
+  theme_bw()
 
-NPMod<-lmer(daily_NPP~Year + (1|Month), data = LTER1)
-anova(NPMod)
-summary(NPMod)
+Respplot<-R_pred+R_dens&theme(axis.text = element_text(size = 16),
+                        axis.title = element_text(size = 18))
+
+
+
+# NPMod<-lmer(daily_NPP~Year + (1|Month), data = LTER1)
+# anova(NPMod)
+# summary(NPMod)
 
 
 NPMod<-brm(daily_NPP~Year + (1|Month), data = LTER1)
 plot(NPMod)
 summary(NPMod)
 fit<-predict(NPMod)
+NPP_coeff<-summary(NPMod)$fixed # pullout the fixed effects
+
+slop_NPP<-round(NPP_coeff$Estimate[2],2) #slope
+SE_NPP<-round(NPP_coeff$Est.Error[2],2) #error
+
+NPP_0_Year <- round(-NPP_coeff$Estimate[1]/NPP_coeff$Estimate[2])
 
 p1<-plot(conditional_effects(NPMod, re_formula = NULL), ask = FALSE, points = TRUE)$Year
 
-
+# plot the prediction from the bayesian model
 NPP_pred<-p1+
   geom_smooth(color = "black")+
-   labs(y = expression(paste("Net ecosystem production (mmol O"[2], " m"^-2, " d"^-1,")")),)+
-   theme_bw()
+   labs(y =bquote(atop("Net ecosystem production",
+                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
+    annotate("text", x = 2020, y = 750, label = paste("NEP = 0 in Year",NPP_0_Year))+
   
-
-# NPP+
-# p1$Year
-# 
-#   geom_hline(yintercept = 0, lty = 2)+
-#   geom_point(data = LTER1, aes(x = Year, y = daily_NPP, shape = Month))+
-#   labs(y = expression(paste("Net ecosystem production (mmol O"[2], " m"^-2, " d"^-1,")")),)+
-#   theme_bw()
+   theme_bw()
 
 get_variables(NPMod)
 
 draws<-NPMod %>%
   spread_draws(b_Year) %>%
   as_tibble() 
-
 
 # calculate proprotion < 0
 
@@ -455,28 +556,28 @@ draws %>%
 plotdata<-as_tibble(density(draws$b_Year)) %>%
   mutate(variable = ifelse(x<0, "On","Off"))
 
-NPP_coeff<-summary(NPMod)$fixed # pullout the fixed effects
-
-slop_NPP<-round(NPP_coeff$Estimate[2],2) #slope
-SE_NPP<-round(NPP_coeff$Est.Error[2],2) #error
 
 
 # Figure showing prosterior for NPP being negative
 NPP_dens<-ggplot(plotdata, aes(x, y)) + 
- # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
   geom_area(data = filter(plotdata, variable == 'Off'), fill = 'grey') + 
   geom_area(data = filter(plotdata, variable == 'On'), fill = 'light blue') +
   geom_line(linewidth = 1.3) +
-  xlim(-50,50)+
-  annotate("text", x = 22.5, y = 0.035, label = "P(0.934) \n NEP is declining over time")+
-  annotate("text", x = slop_NPP, y = 0.05, label = paste(slop_NPP,"\u00B1",SE_NPP))+
+  xlim(-100,50)+
+  annotate("text", x = 27.5, y = 0.035, label = "P(0.934) \n NEP is declining over time")+
+  annotate("text", x = slop_NPP, y = 0.06, label = paste(slop_NPP,"\u00B1",SE_NPP))+
   labs(x = "Change in NEP per year",
        y = "Density")+
   theme_bw()
 
-NPP_pred+NPP_dens&theme(axis.text = element_text(size = 16),
+NPP_plot<-NPP_pred+NPP_dens&theme(axis.text = element_text(size = 16),
                         axis.title = element_text(size = 18))
 
+
+GPPplot/Respplot/NPP_plot
+ggsave(filename = "Output/BayesRegression.png", width = 14, height = 14)
 
 ### tBeta### think about this as a probablility that it is negative
 
