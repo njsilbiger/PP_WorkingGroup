@@ -291,6 +291,22 @@ summary(winter_temp_mod)
  #0.048 +/-0.017 degrees increase per year (~1C increase every 20 years)
 
 
+## NEC and total calc
+PP%>%
+  ggplot(aes(x = total_Calc, y = daily_NEC))+
+  geom_point(
+    #aes(color = Month)
+  )+
+  #  geom_errorbar(aes(ymin = NEP-SE_NEP, ymax = NEP+SE_NEP), width = 0.1)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "% Cover of Calcifiers",
+       y = "NEC")+
+   facet_wrap(~Month, scales = "free",ncol = 1)+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14))
+
 NEP_plot<-PP_long %>%  
   ggplot(aes(x = mean_alive, y = NEP, color = Day_Night))+
   geom_point()+
