@@ -14,6 +14,10 @@ library(here)
 library(performance)
 library(effectsize)
 library(interactions)
+library(lme4)
+library(lmerTest)
+library(brms)
+library(tidybayes)
 
 ## Read in the different data sheets ####
 #Read google sheets data into R.
@@ -365,9 +369,11 @@ GPP_R<-LTER1 %>%
   annotate("text", x = 2010.5, y = 2400, label = "Gross Photosynthesis")+
   annotate("text", x = 2010.5, y = -400, label = "Respiration")+
   scale_color_manual(values = c("#E79685","#815661"))+
-  labs(y = "Community production (GP and R)")+
+  labs(y = expression(paste("Community production (mmol O"[2], " m"^-2, " d"^-1,")")),
+       x = "")+
   theme_bw()+
-  theme(legend.position = "none")
+  theme(legend.position = "none",
+        axis.text.x = element_blank())
 
 
 NPP<-LTER1 %>% 
@@ -376,7 +382,7 @@ NPP<-LTER1 %>%
   geom_hline(yintercept = 0, lty = 2)+
   geom_point(aes(shape = Month), color = "grey5")+
   geom_smooth(method = "lm", color = "black")+
-  labs(y = "Net Community production")+
+  labs(y = expression(paste("Net ecosystem production (mmol O"[2], " m"^-2, " d"^-1,")")),)+
   theme_bw()
 
 GPP_R/NPP+plot_layout(guides = "collect")
@@ -390,15 +396,89 @@ LTER1 %>%
   geom_smooth(method = "lm")+
   geom_point(aes(shape = Month))+
   scale_color_manual(values = c("#E79685","#815661"))+
-  labs(y = "Community Calcification")+
+  labs(y = expression(paste("Net ecosystem calcification (mmol CaCO"[3], " m"^-2, " d"^-1,")")),)+
   guides(color = "none")+
   theme_bw()
 
-GPPMod<-lm(daily_GPP~Year*Month, data = LTER1)
+GPPMod<-lmer(daily_GPP~Year + (1|Month), data = LTER1)
 anova(GPPMod)
+summary(GPPMod)
 
-RMod<-lm(daily_R~Year*Month, data = LTER1)
+
+RMod<-lmer(daily_R~Year + (1|Month), data = LTER1)
 anova(RMod)
+summary(RMod)
+
+NPMod<-lmer(daily_NPP~Year + (1|Month), data = LTER1)
+anova(NPMod)
+summary(NPMod)
+
+
+NPMod<-brm(daily_NPP~Year + (1|Month), data = LTER1)
+plot(NPMod)
+summary(NPMod)
+fit<-predict(NPMod)
+
+p1<-plot(conditional_effects(NPMod, re_formula = NULL), ask = FALSE, points = TRUE)$Year
+
+
+NPP_pred<-p1+
+  geom_smooth(color = "black")+
+   labs(y = expression(paste("Net ecosystem production (mmol O"[2], " m"^-2, " d"^-1,")")),)+
+   theme_bw()
+  
+
+# NPP+
+# p1$Year
+# 
+#   geom_hline(yintercept = 0, lty = 2)+
+#   geom_point(data = LTER1, aes(x = Year, y = daily_NPP, shape = Month))+
+#   labs(y = expression(paste("Net ecosystem production (mmol O"[2], " m"^-2, " d"^-1,")")),)+
+#   theme_bw()
+
+get_variables(NPMod)
+
+draws<-NPMod %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+
+
+# calculate proprotion < 0
+
+draws %>%
+  mutate(lessthan = ifelse(b_Year<0,1,0)) %>%
+  count(lessthan) %>%
+  reframe(prop = n[lessthan == 1]/sum(n))
+
+# probability of 0.934 that NEP is declining over time
+
+plotdata<-as_tibble(density(draws$b_Year)) %>%
+  mutate(variable = ifelse(x<0, "On","Off"))
+
+NPP_coeff<-summary(NPMod)$fixed # pullout the fixed effects
+
+slop_NPP<-round(NPP_coeff$Estimate[2],2) #slope
+SE_NPP<-round(NPP_coeff$Est.Error[2],2) #error
+
+
+# Figure showing prosterior for NPP being negative
+NPP_dens<-ggplot(plotdata, aes(x, y)) + 
+ # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
+  geom_area(data = filter(plotdata, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata, variable == 'On'), fill = 'light blue') +
+  geom_line(linewidth = 1.3) +
+  xlim(-50,50)+
+  annotate("text", x = 22.5, y = 0.035, label = "P(0.934) \n NEP is declining over time")+
+  annotate("text", x = slop_NPP, y = 0.05, label = paste(slop_NPP,"\u00B1",SE_NPP))+
+  labs(x = "Change in NEP per year",
+       y = "Density")+
+  theme_bw()
+
+NPP_pred+NPP_dens&theme(axis.text = element_text(size = 16),
+                        axis.title = element_text(size = 18))
+
+
+### tBeta### think about this as a probablility that it is negative
 
 (NC/ND)&theme_bw()|(GP/R)&theme_bw()
 
