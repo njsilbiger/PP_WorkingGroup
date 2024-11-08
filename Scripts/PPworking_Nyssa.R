@@ -137,12 +137,36 @@ LTER1_cover+ theme(legend.position = "none")|All_cover+ plot_layout(guides = "co
 
 ggsave(here("Output","BenthicCoverAll.pdf"), width = 8, height = 4)
 
+
+### Make a plot of all living cover (basically everything - sand + coral RUbble and algal turf)
+LTER1_coverliving<-Benthic_summary_Algae %>%
+  filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"),
+         Site == "LTER 1")%>%
+  group_by(Year)%>%
+  summarise(mean_alive = sum(mean_cover)) %>%
+  ggplot(aes(x = Year, y = mean_alive))+
+  #  geom_point()+
+  geom_line(size = 1)+
+  labs(x = "",
+       y = "Percent Cover of living coral and macroalgae",
+       color = "",
+       title = "LTER 1 only")+
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+
 ## Calculate the total percent of calcifiers
 Total_Calc<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines"))%>%
   group_by(Year, Site)%>%
   reframe(total_Calc = mean_cover[name == "Coral"]+
             mean_cover[name == "Crustose Corallines"])
+
+TotalLiving<-Benthic_summary_Algae %>%
+  filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
+  group_by(Year, Site)%>%
+  summarise(mean_alive = sum(mean_cover))
 
 ## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
 
@@ -151,6 +175,8 @@ Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
 # Bring together PP and deployment physics data
 PP <- PP %>%
   left_join(Physics_deploy)%>%
+  left_join(TotalLiving %>%
+              filter(Site %in% c("LTER 1","LTER 2"))) %>% # bring in total live data
   left_join(Total_Calc %>%
               filter(Site %in% c("LTER 1","LTER 2"))) # bring in total calc data
 
@@ -167,7 +193,9 @@ PP_long<-PP %>%
               select(Month, Year, NEC = night_NEC, SE = night_NEC_SE,NEP = daily_R, SE_NEP = R_SE)%>%
               mutate(Day_Night = "Night")) %>%
   left_join(Total_Calc%>%
-              filter(Site =="LTER 1")) # b
+              filter(Site =="LTER 1"))  %>%# b
+  left_join(TotalLiving%>%
+              filter(Site =="LTER 1"))  # b
 
 NEC_plot<-PP_long %>%  
 ggplot(aes(x = Year, y = NEC, color = Day_Night))+
@@ -176,11 +204,98 @@ ggplot(aes(x = Year, y = NEC, color = Day_Night))+
   geom_smooth(method = "lm")+
   facet_wrap(~Month)
 
+NEP_alive_GP<-PP_long %>%  
+  filter(Day_Night == "Day")%>%
+  ggplot(aes(x = mean_alive, y = NEP))+
+  geom_point(
+    #aes(color = Month)
+  )+#  geom_errorbar(aes(ymin = NEP-SE_NEP, ymax = NEP+SE_NEP), width = 0.1)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "% Cover of Macro Producers",
+       y = "Gross Ecosystem Production")+
+ # facet_wrap(~Day_Night, scales = "free",ncol = 1)+
+  theme_bw()&
+  theme(axis.title = element_text(size = 16),
+        axis.title.x = element_blank(),
+        axis.text = element_text(size = 14),
+        axis.text.x = element_blank(),
+        strip.text = element_text(size = 14))
+ 
+NEP_alive_R<-PP_long %>%  
+  filter(Day_Night == "Night")%>%
+  ggplot(aes(x = mean_alive, y = -NEP))+
+  geom_point(
+    #aes(color = Month)
+    )+
+  #  geom_errorbar(aes(ymin = NEP-SE_NEP, ymax = NEP+SE_NEP), width = 0.1)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "% Cover of Macro Producers",
+       y = "Respiration")+
+  # facet_wrap(~Day_Night, scales = "free",ncol = 1)+
+  theme_bw()&
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14))
+
+NEP_alive_GP/NEP_alive_R+plot_layout(guides = "collect")
+
+ggsave(filename = "Output/CoverNEP.png", width = 6, height = 8)
+
+alive_mod_GP<-lmer(NEP~mean_alive + (1|Month), data = PP_long %>%  
+                     filter(Day_Night == "Day"))
+anova(alive_mod_GP)
+
+alive_mod_R<-lmer(NEP~mean_alive + (1|Month), data = PP_long %>%  
+                     filter(Day_Night == "Night"))
+anova(alive_mod_R)
+
+### strong negative decline between temperature and cover, but only in june
+PP %>%
+  filter(Month == "June")%>%
+ggplot( aes(x = Temp_mean, y = mean_alive))+
+  geom_point() +
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "Mean Winter Temperature",
+       y = "% Cover of Macro Producers")+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14)
+  )
+ggsave(filename = "Output/TempAlive.png", width = 6, height = 6)
+
+
+PP %>%
+  mutate(Month = ifelse(Month == "June","Winter","Summer"))%>%
+  #filter(Month == "June")%>%
+  ggplot( aes(y = Temp_mean, x = Year))+
+  geom_point() +
+  geom_smooth(method = "lm", color = "black", data = PP %>%
+                mutate(Month = ifelse(Month == "June","Winter","Summer"))%>%
+                filter(Month == "Winter"))+
+  labs(y = "Mean Monthly Temperature",
+       x = "Year")+
+  theme_bw()+
+  facet_wrap(~Month, ncol = 1, scales = "free_y")+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14)
+        )
+
+ggsave(filename = "Output/TempYear.png", width = 6, height = 8)
+
+winter_temp_mod<-lm(Temp_mean~Year , data = PP %>%  
+                     filter(Month == "June"))
+anova(winter_temp_mod)
+summary(winter_temp_mod)
+ #0.048 +/-0.017 degrees increase per year (~1C increase every 20 years)
+
+
 NEP_plot<-PP_long %>%  
-  ggplot(aes(x = Year, y = NEP, color = Day_Night))+
+  ggplot(aes(x = mean_alive, y = NEP, color = Day_Night))+
   geom_point()+
   geom_errorbar(aes(ymin = NEP-SE_NEP, ymax = NEP+SE_NEP), width = 0.1)+
-  geom_smooth(method = "lm")+
+  geom_smooth(method = "lm")
   facet_wrap(~Month)
 
 NEC_plot/NEP_plot
@@ -660,7 +775,7 @@ LTER1 %>%
 
 LTER1 %>%
   ggplot(aes(x = TotalPAR_mean, y = daily_NEC))+
-  geom_point()+
+  geom_point(aes(color = Month))+
   geom_smooth(method = "lm")
 
 LTER1 %>%
@@ -670,7 +785,7 @@ LTER1 %>%
 
 LTER1 %>%
   ggplot(aes(x = Temp_mean, y = daily_GPP))+
-  geom_point()+
+  geom_point(aes(color = Month))+
   geom_smooth(method = "lm")
 
 #### Model 
