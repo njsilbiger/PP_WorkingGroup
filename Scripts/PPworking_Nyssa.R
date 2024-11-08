@@ -355,6 +355,45 @@ R<-ggplot(LTER1, aes(x = Year, y = daily_R))+
   geom_point(aes(color = Month))+
   geom_smooth(method = "lm")
 
+GPP_R<-LTER1 %>% 
+  select(Year, Month, daily_GPP, daily_R)%>%
+  pivot_longer(cols = c(daily_GPP, daily_R)) %>%
+  ggplot(aes(x = Year, y = value, color = name))+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point(aes(shape = Month))+
+  geom_smooth(method = "lm")+
+  annotate("text", x = 2010.5, y = 2400, label = "Gross Photosynthesis")+
+  annotate("text", x = 2010.5, y = -400, label = "Respiration")+
+  scale_color_manual(values = c("#E79685","#815661"))+
+  labs(y = "Community production (GP and R)")+
+  theme_bw()+
+  theme(legend.position = "none")
+
+
+NPP<-LTER1 %>% 
+  select(Year, Month, daily_NPP, daily_R)%>%
+  ggplot(aes(x = Year, y = daily_NPP))+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point(aes(shape = Month), color = "grey5")+
+  geom_smooth(method = "lm", color = "black")+
+  labs(y = "Net Community production")+
+  theme_bw()
+
+GPP_R/NPP+plot_layout(guides = "collect")
+
+LTER1 %>% 
+  select(Year, Month, daily_NEC, night_NEC)%>%
+  pivot_longer(cols = c(daily_NEC, night_NEC)) %>%
+  drop_na()%>%
+  ggplot(aes(x = Year, y = value, color = name))+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_smooth(method = "lm")+
+  geom_point(aes(shape = Month))+
+  scale_color_manual(values = c("#E79685","#815661"))+
+  labs(y = "Community Calcification")+
+  guides(color = "none")+
+  theme_bw()
+
 GPPMod<-lm(daily_GPP~Year*Month, data = LTER1)
 anova(GPPMod)
 
