@@ -2,7 +2,7 @@
 ### Nyssa Silbiger ####
 ### 9/8/2023 #####
 
-### updated 5/31/24
+### updated 11/25/24
 
 
 ## load libraries #####
@@ -537,8 +537,9 @@ LTER1 %>%
 
 
 ### CALCULATE THE X INTERCEPT FOR ALL THE BELOW MODELS TO PREDICT WHAT YEAR IT WILL REACH 0.
-
-GPPMod<-brm(daily_GPP~Year + (1|Month), data = LTER1)
+set.seed(23)
+GPPMod<-brm(daily_GPP~Year + (1|Month), data = LTER1, 
+            control = list(adapt_delta = 0.92), iter = 3000)
 summary(GPPMod)
 GPP_coeff<-summary(GPPMod)$fixed # pullout the fixed effects
 
@@ -550,13 +551,28 @@ GPP_0_Year <- round(-GPP_coeff$Estimate[1]/GPP_coeff$Estimate[2])
 # GP model
 p_gp<-plot(conditional_effects(GPPMod, "Year",re_formula = NULL), ask = FALSE, points = TRUE)$Year
 
-GPP_pred<-p_gp+
-  geom_smooth(color = "black")+
-  labs(y =bquote(atop("Gross Photosynthesis",
+data_gp<-conditional_effects(GPPMod, "Year",re_formula = NULL)$Year
+
+GPP_pred<-ggplot()+
+  geom_line(data = data_gp, aes(x = effect1__, y = estimate__), size = 1.2)+
+  geom_ribbon(data = data_gp, aes(x = effect1__, ymin = lower__, ymax = upper__),
+              fill = "#A1AEB1", alpha = 0.3)+
+  geom_point(data = LTER1, aes(x = Year, y = daily_GPP, color = Month), size = 2)+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Year",
+       y =bquote(atop("Gross Photosynthesis",
                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
- # labs(y = expression(paste("Gross Photoshynthesis (mmol O"[2], " m"^-2, " d"^-1,")")))+
   annotate("text", x = 2020, y = 2000, label = paste("GP = 0 in Year",GPP_0_Year))+
-  theme_bw()
+  theme_bw()+
+  theme(legend.position = "none")
+
+# GPP_pred<-p_gp+
+#   geom_smooth(color = "black")+
+#   labs(y =bquote(atop("Gross Photosynthesis",
+#                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
+#  # labs(y = expression(paste("Gross Photoshynthesis (mmol O"[2], " m"^-2, " d"^-1,")")))+
+#   annotate("text", x = 2020, y = 2000, label = paste("GP = 0 in Year",GPP_0_Year))+
+#   theme_bw()
 
 draws_GPP<-GPPMod %>%
   spread_draws(b_Year) %>%
@@ -580,7 +596,7 @@ GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.015, label = "P(1) \n GP is declining over time")+
-  annotate("text", x = slop_GPP, y = 0.028, label = paste(slop_GPP,"\u00B1",SE_GPP))+
+  annotate("text", x = slop_GPP, y = 0.03, label = paste(slop_GPP,"\u00B1",SE_GPP))+
   labs(x = "Change in GP per year",
        y = "Density")+
   theme_bw()
@@ -588,7 +604,8 @@ GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) +
 GPPplot<-GPP_pred+GPP_dens&theme(axis.text = element_text(size = 16),
                               axis.title = element_text(size = 18))
 
-RMod<-brm(-daily_R~Year + (1|Month), data = LTER1, iter = 4000)
+RMod<-brm(-daily_R~Year + (1|Month), data = LTER1, 
+          control = list(adapt_delta = 0.92), iter = 3000)
 #anova(RMod)
 R_coeff<-summary(RMod)$fixed # pullout the fixed effects
 slop_R<-round(R_coeff$Estimate[2],2) #slope
@@ -598,14 +615,29 @@ R_0_Year <- round(-R_coeff$Estimate[1]/R_coeff$Estimate[2]) # year at 0
 
 p_r<-plot(conditional_effects(RMod, "Year",re_formula = NULL), ask = FALSE, points = TRUE)$Year
 
-# plot the prediction from the bayesian model
-R_pred<-p_r+
-  geom_smooth(color = "black")+
-  labs(y =bquote(atop("Respiration",
+data_r<-conditional_effects(RMod, "Year",re_formula = NULL)$Year
+
+R_pred<-ggplot()+
+   geom_line(data = data_r, aes(x = effect1__, y = estimate__), size = 1.2)+
+  geom_ribbon(data = data_r, aes(x = effect1__, ymin = lower__, ymax = upper__),
+              fill = "#A1AEB1", alpha = 0.3)+
+  geom_point(data = LTER1, aes(x = Year, y = -daily_R, color = Month), size = 2)+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Year",
+       y =bquote(atop("Respiration",
                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
- # labs(y = expression(paste("Respiration (mmol O"[2], " m"^-2, " d"^-1,")")))+
   annotate("text", x = 2020, y = 1300, label = paste("R = 0 in Year",R_0_Year))+
-  theme_bw()
+  theme_bw()+
+  theme(legend.position = "none")
+
+# plot the prediction from the bayesian model
+#R_pred<-p_r+
+ # geom_smooth(color = "black")+
+  #labs(y =bquote(atop("Respiration",
+   #                   "(mmol" ~ O[2]~m^-2~d^-1~")")))+
+ # labs(y = expression(paste("Respiration (mmol O"[2], " m"^-2, " d"^-1,")")))+
+  #annotate("text", x = 2020, y = 1300, label = paste("R = 0 in Year",R_0_Year))+
+  #theme_bw()
 
 draws_R<-RMod %>%
   spread_draws(b_Year) %>%
@@ -632,7 +664,7 @@ R_dens<-ggplot(plotdata_R, aes(x, y)) +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.025, label = "P(0.998) \n R is declining over time")+
-  annotate("text", x = slop_R, y = 0.035, label = paste(slop_R,"\u00B1",SE_R))+
+  annotate("text", x = slop_R, y = 0.04, label = paste(slop_R,"\u00B1",SE_R))+
   labs(x = "Change in R per year",
        y = "Density")+
   theme_bw()
@@ -640,14 +672,12 @@ R_dens<-ggplot(plotdata_R, aes(x, y)) +
 Respplot<-R_pred+R_dens&theme(axis.text = element_text(size = 16),
                         axis.title = element_text(size = 18))
 
-
-
 # NPMod<-lmer(daily_NPP~Year + (1|Month), data = LTER1)
 # anova(NPMod)
 # summary(NPMod)
 
-
-NPMod<-brm(daily_NPP~Year + (1|Month), data = LTER1)
+NPMod<-brm(daily_NPP~Year + (1|Month), data = LTER1, 
+           control = list(adapt_delta = 0.92), iter = 3000)
 plot(NPMod)
 summary(NPMod)
 fit<-predict(NPMod)
@@ -687,8 +717,6 @@ draws %>%
 plotdata<-as_tibble(density(draws$b_Year)) %>%
   mutate(variable = ifelse(x<0, "On","Off"))
 
-
-
 # Figure showing prosterior for NPP being negative
 NPP_dens<-ggplot(plotdata, aes(x, y)) + 
   geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
@@ -707,10 +735,86 @@ NPP_plot<-NPP_pred+NPP_dens&theme(axis.text = element_text(size = 16),
                         axis.title = element_text(size = 18))
 
 
-GPPplot/Respplot/NPP_plot
-ggsave(filename = "Output/BayesRegression.png", width = 14, height = 14)
-
 ### tBeta### think about this as a probablility that it is negative
+
+#### Calcification model
+NECMod<-brm(daily_NEC~Year*Month, data =LTER1 , 
+            control = list(adapt_delta = 0.92, max_treedepth = 20), iter = 3000)
+
+summary(NECMod)
+NEC_coeff<-summary(NECMod)$fixed # pullout the fixed effects
+
+slop_NEC<-round(NEC_coeff$Estimate[2],2) #slope
+SE_NEC<-round(NEC_coeff$Est.Error[2],2) #error
+
+NEC_0_Year <- round(-NEC_coeff$Estimate[1]/NEC_coeff$Estimate[2])
+
+# NEC model
+data_NEC<-conditional_effects(NECMod, "Year:Month",re_formula = NULL)$Year
+
+NEC_pred<-ggplot()+
+  geom_line(data = data_NEC, aes(x = effect1__, y = estimate__, color = effect2__), size = 1.2)+
+  geom_ribbon(data = data_NEC, aes(x = effect1__, ymin = lower__, ymax = upper__, fill = effect2__),
+               alpha = 0.3)+
+  geom_point(data = LTER1, aes(x = Year, y = daily_NEC, color = Month), size = 2)+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  scale_fill_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(color = "",
+       fill = "",
+       x = "Year",
+       y =bquote(atop("Net Ecosystem Calcification",
+                      "(mmol" ~ CaCO[3]~m^-2~d^-1~")")))+
+  annotate("text", x = 2020, y = 500, label = paste("NEC = 0 in Year",NEC_0_Year))+
+  theme_bw()+
+  theme(legend.position = c(.15,.8))
+
+# p_NEC<-plot(conditional_effects(NECMod, "Year:Month",re_formula = NULL), ask = FALSE, points = TRUE)$Year+
+#   geom_hline(yintercept = 0, linetype = 2)+
+#   theme_bw()
+
+# NEC_pred<-p_NEC+
+#   geom_smooth(color = "black")+
+#   labs(color = "",
+#        fill = "",
+#     y =bquote(atop("Net ecosystem calcification (day)",
+#                       "(mmol" ~ CaCO[3]~m^-2~d^-1~")")))+
+#   annotate("text", x = 2020, y = 500, label = paste("NEC = 0 in Year",NEC_0_Year))+
+#   theme_bw()+
+#   theme(legend.position = c(.8,.8))
+
+draws_NEC<-NECMod %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+
+# calculate proportion < 0
+draws_NEC %>%
+  mutate(lessthan = ifelse(b_Year<0,1,0)) %>%
+  count(lessthan) %>%
+  reframe(prop = n[lessthan == 1]/sum(n))
+
+# probability of 1 that NEP is declining over time
+plotdata_NEC<-as_tibble(density(draws_NEC$b_Year)) %>%
+  mutate(variable = ifelse(x<0, "On","Off"))
+
+# Figure showing prosterior for R being negative
+NEC_dens<-ggplot(plotdata_NEC, aes(x, y)) + 
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_area(data = filter(plotdata_NEC, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill = 'light blue') +
+  geom_line(linewidth = 1.3) +
+  xlim(-100,50)+
+  annotate("text", x = 27.5, y = 0.015, label = "P(0.99) \n NEC is declining over time")+
+  annotate("text", x = slop_NEC, y = 0.06, label = paste(slop_NEC,"\u00B1",SE_NEC))+
+  labs(x = "Change in NEC per year",
+       y = "Density")+
+  theme_bw()
+
+NECplot<-NEC_pred+NEC_dens&theme(axis.text = element_text(size = 16),
+                                 axis.title = element_text(size = 18))
+
+GPPplot/Respplot/NECplot
+ggsave(filename = "Output/BayesRegression2.png", width = 14, height = 14)
+
 
 (NC/ND)&theme_bw()|(GP/R)&theme_bw()
 
