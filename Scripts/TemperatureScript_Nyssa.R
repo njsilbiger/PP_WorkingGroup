@@ -6,11 +6,12 @@ library(googlesheets4)
 library(lubridate)
 
 ## Temperature LTER 1
-Temp_LTER1<-read_sheet("https://docs.google.com/spreadsheets/d/1YJRyNAeo03xLoThBGX2-BtHpWqUpYXIarmYTsIhw5aI/edit?usp=sharing")
+#Temp_LTER1<-read_sheet("https://docs.google.com/spreadsheets/d/1YJRyNAeo03xLoThBGX2-BtHpWqUpYXIarmYTsIhw5aI/edit?usp=sharing")
+Temp_LTER1<-read_csv(here("Data","LTER1Temperature.csv"))
 
 Temp_LTER1 <- Temp_LTER1 %>%
-  mutate(Year = year(time_local),
-         Month = month(time_local),
+  mutate(Year = year(mdy_hm(time_local)),
+         Month = month(mdy_hm(time_local)),
          date = as.Date(time_local)) # extract date
 
 # Calculate summary stats by month
@@ -46,7 +47,8 @@ MeanMonth %>%
   pivot_longer(MDMax:MDTR)%>%
   ggplot(aes(x = Year, y = value, color = monthname)) +
   geom_point()+
-  geom_line()+
+  geom_smooth(method = "lm")+
+  #geom_line()+
   facet_wrap(~name, scale = "free_y")
 
 ### Read in the benthic data ####

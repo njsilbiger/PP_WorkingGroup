@@ -29,6 +29,10 @@ PP<-read_csv(here("Data","PP_Data.csv"))%>%
   mutate(NEC_NEP = daily_NEC/daily_NPP, ## calculate NEP/NEC ratio
          NEC_R = night_NEC/daily_R)
 
+## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
+Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
+
+
 # Read in Benthic data 
 # Benthic Cover data
 BenthicCover <- read_csv(here("Data","Backreef_Data.csv"))%>%
@@ -38,8 +42,6 @@ BenthicCover <- read_csv(here("Data","Backreef_Data.csv"))%>%
 # Bob's transect data
 BenthicCover_Algae<-read_csv(here("Data","Backreef_Algae.csv")) %>%
   filter(Habitat == "Backreef")
-
-
 
 Benthic_summary_Algae<-BenthicCover_Algae %>%
   rename(name = Taxonomy_Substrate_Functional_Group)%>%
@@ -148,7 +150,7 @@ LTER1_coverliving<-Benthic_summary_Algae %>%
   #  geom_point()+
   geom_line(size = 1)+
   labs(x = "",
-       y = "Percent Cover of living coral and macroalgae",
+       y = "Percent Cover of living macro-producers (coral and macroalgae)",
        color = "",
        title = "LTER 1 only")+
   theme_bw()+
@@ -168,9 +170,6 @@ TotalLiving<-Benthic_summary_Algae %>%
   group_by(Year, Site)%>%
   summarise(mean_alive = sum(mean_cover))
 
-## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
-
-Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
 
 # Bring together PP and deployment physics data
 PP <- PP %>%
@@ -249,6 +248,51 @@ alive_mod_R<-lmer(NEP~mean_alive + (1|Month), data = PP_long %>%
                      filter(Day_Night == "Night"))
 anova(alive_mod_R)
 
+## Show changing temperture over time by month
+PP %>%
+  ggplot( aes(x = Year, y = Temp_mean, color = Month))+
+  geom_point() +
+  geom_smooth(method = "lm")+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Year",
+       y = "Mean Temperature"~degree~"C")+
+  facet_wrap(~Month)+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14)
+  )
+# summer temperature is  driven by anomolous heatwaves and winter is climate change
+PP %>%
+  ggplot( aes(x = Year, y = TotalPAR_mean, color = Month))+
+  geom_point() +
+  geom_smooth(method = "lm")+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Year",
+       y = "Total PAR")+
+  facet_wrap(~Month)+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14)
+  )
+
+# now flow
+PP %>%
+  ggplot( aes(x = Year, y = Flow_mean, color = Month))+
+  geom_point() +
+  geom_smooth(method = "lm")+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Year",
+       y = "Mean Flow")+
+  facet_wrap(~Month)+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        strip.text = element_text(size = 14)
+  )
+
+
 ### strong negative decline between temperature and cover, but only in june
 PP %>%
   filter(Month == "June")%>%
@@ -325,8 +369,6 @@ PP %>%
   geom_smooth(method = "lm")+
   facet_wrap(~Month)
 
-
-
 ## NEC/NEC for day
 PP %>% 
   filter(Site == "LTER 1",
@@ -354,13 +396,11 @@ PP_long %>%
   geom_smooth(method = "lm")+
   facet_wrap(~Month)
 
-
 ### Look at the ratio of coral to algae vs NEP and NEC
 Benthic_summary<-BenthicCover %>%
   group_by(Year, Site) %>%
   summarise_at(vars(coral:ctb), .funs = function(x){mean(x,na.rm = TRUE)}) %>% # calculate the mean by transect
   mutate(logratio = log(coral/macroalgae)) # calculate log ratio
-
 
 Benthic_summary %>%
   ggplot(aes(x = Year, y = logratio))+
@@ -378,7 +418,6 @@ Benthic_summary %>%
   labs(y = "Percent Cover")+
   facet_wrap(~Site)
   
-
 # make a figure of LTER 2 and 6 for 2022
 Benthic_summary %>%
   filter(Site %in% c("LTER 2","LTER 6"),
@@ -423,7 +462,6 @@ LTER1<-Benthic_summary %>%
   droplevels()
 
 # Add a coral
-
 uuid <- get_uuid(name = "Acropora donei", n = 1)
 # Get the image for that uuid
 img <- get_phylopic(uuid = uuid)
@@ -431,8 +469,6 @@ img <- get_phylopic(uuid = uuid)
 # algae
 uuid2 <- get_uuid(name = "Fucus vesiculosus", n = 1)
 img2 <- get_phylopic(uuid = uuid2)
-
-
 
 LTER1 %>%
   rename(Coral=coral,
@@ -450,8 +486,6 @@ LTER1 %>%
   theme_bw()+
   facet_wrap(~Benthos*Month, ncol = 2)+
   theme(strip.background = element_blank())
-
-
 
 ###  
 CoralMod<-lm(daily_GPP~coral*Month, data = LTER1)
@@ -535,8 +569,7 @@ LTER1 %>%
 # anova(GPPMod)
 # summary(GPPMod)
 
-
-### CALCULATE THE X INTERCEPT FOR ALL THE BELOW MODELS TO PREDICT WHAT YEAR IT WILL REACH 0.
+###### Bayesian Analysis for metabolism #######
 set.seed(23)
 GPPMod<-brm(daily_GPP~Year + (1|Month), data = LTER1, 
             control = list(adapt_delta = 0.92), iter = 3000)
@@ -653,7 +686,6 @@ draws_R %>%
 # probability of 0.998 that NEP is declining over time
 plotdata_R<-as_tibble(density(draws_R$b_Year)) %>%
   mutate(variable = ifelse(x<0, "On","Off"))
-
 
 # Figure showing prosterior for R being negative
 R_dens<-ggplot(plotdata_R, aes(x, y)) + 
@@ -815,6 +847,109 @@ NECplot<-NEC_pred+NEC_dens&theme(axis.text = element_text(size = 16),
 GPPplot/Respplot/NECplot
 ggsave(filename = "Output/BayesRegression2.png", width = 14, height = 14)
 
+#### Bayesian analysis for environmental data #######
+LTER1 <-LTER1 %>% # add in scaled data
+  mutate(Temp_scale = as.numeric(scale(Temp_mean, scale = TRUE, center = TRUE)),
+         Light_scale = as.numeric(scale(TotalPAR_mean, scale = TRUE, center = TRUE)),
+         Flow_scale = as.numeric(scale(Flow_mean, scale = TRUE, center = TRUE))
+         )
+
+# split the seasons
+WinterData<-LTER1 %>%
+  filter(Month == "June")
+
+SummerData<-LTER1 %>%
+  filter(Month == "January")
+
+# Temperature
+set.seed(100)
+TempMod_winter<-brm(Temp_scale~Year , data = WinterData, 
+            control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+Temp_winter_Coefs <- summary(TempMod_winter)$fixed %>%
+  mutate(Month = "Winter",
+         Parameter = "Temperature",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+TempMod_summer<-brm(Temp_scale~Year , data = SummerData, 
+                    control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+Temp_summer_Coefs <- summary(TempMod_summer)$fixed %>%
+  mutate(Month = "Summer",
+         Parameter = "Temperature",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+## Light
+LightMod_winter<-brm(Light_scale~Year , data = WinterData, 
+                    control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+Light_winter_Coefs <- summary(LightMod_winter)$fixed %>%
+  mutate(Month = "Winter",
+         Parameter = "Light",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+LightMod_summer<-brm(Light_scale~Year , data = SummerData, 
+                     control = list(adapt_delta = 0.92), iter = 3000)
+
+Light_summer_Coefs <- summary(LightMod_summer)$fixed %>%
+  mutate(Month = "Summer",
+         Parameter = "Light",
+         coef = rownames(.)) %>%
+  as_tibble()
+# Flow
+FlowMod_winter<-brm(Flow_scale~Year , data = WinterData, 
+                     control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+Flow_winter_Coefs <- summary(FlowMod_winter)$fixed %>%
+  mutate(Month = "Winter",
+         Parameter = "Flow",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+FlowMod_summer<-brm(Flow_scale~Year , data = SummerData, 
+                     control = list(adapt_delta = 0.92), iter = 3000)
+
+Flow_summer_Coefs <- summary(FlowMod_summer)$fixed %>%
+  mutate(Month = "Summer",
+         Parameter = "Flow",
+         coef = rownames(.)) %>%
+  as_tibble()
+  
+
+## Bring together the coeffes
+EnviroCoefs<-bind_rows(Temp_summer_Coefs,
+          Temp_winter_Coefs,
+          Light_summer_Coefs,
+          Light_winter_Coefs,
+          Flow_summer_Coefs,
+          Flow_winter_Coefs)
+
+
+EnviroCoefs %>%
+  filter(coef == "Year")%>%
+  ggplot(aes(x = Estimate, y = Parameter, color = Month))+
+  geom_vline(xintercept = 0)+
+  geom_point(size = 4, position = position_dodge(0.15))+
+  geom_errorbarh(aes(xmin = Estimate - Est.Error, xmax = Estimate + Est.Error, y = Parameter), 
+                 height = 0, position = position_dodge(0.15))+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
+  labs(x = "Standardized Effect Size",
+       y = "",
+       color = "")+
+  theme_bw()+
+  theme(axis.text = element_text(size = 16),
+        axis.title = element_text(size = 18),
+        legend.text = element_text(size = 16))
+  
+ggsave(filename = "Output/EnviroCoefs.png", width = 8, height = 5)
+
 
 (NC/ND)&theme_bw()|(GP/R)&theme_bw()
 
@@ -830,10 +965,15 @@ LTER1 %>%
   summarise_if(.predicate = is.numeric,.funs = function(x){mean(x, na.rm = TRUE)})%>%
   ggplot(aes(x = Year, y = daily_GPP))+
   geom_point()
-  
-
 
 ####
+
+
+
+
+
+
+
  # MAKE A PLOT COMPARING ESTIMATES OF CHANGE OVER TIME HERE TO OTHER DATASETS AROUND THE WORLD
 
 ### GPP ~ coral cover, NEC ~ GPP, Show coral cover decline across all 6 sites to show consistency in trend
