@@ -33,8 +33,7 @@ Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
 # Read in Benthic data 
 # Benthic Cover data
 BenthicCover <- read_csv(here("Data","Backreef_Data.csv"))%>%
-  # read_sheet('https://docs.google.com/spreadsheets/d/1iA8rP_raCQ8NTPUGqAZ6LVeYza7eKqU4ep6yucpj1U0/edit?usp=sharing')%>%
-  mutate_at(vars(coral:sub_squares), .funs = as.numeric)
+   mutate_at(vars(coral:sub_squares), .funs = as.numeric)
 
 # Bob's transect data
 BenthicCover_Algae<-read_csv(here("Data","Backreef_Algae.csv")) %>%
@@ -203,7 +202,6 @@ TotalLiving<-Benthic_summary_Algae %>%
   group_by(Year, Site)%>%
   summarise(mean_alive = sum(mean_cover))
 
-
 # Bring together PP and deployment physics data
 PP <- PP %>%
   left_join(Physics_deploy)%>%
@@ -228,11 +226,6 @@ PP_long<-PP %>%
               filter(Site =="LTER 1"))  %>%# b
   left_join(TotalLiving%>%
               filter(Site =="LTER 1"))  # b
-
-
-
- #0.048 +/-0.017 degrees increase per year (~1C increase every 20 years)
-
 
 ### Look at the ratio of coral to algae vs NEP and NEC
 Benthic_summary<-BenthicCover %>%

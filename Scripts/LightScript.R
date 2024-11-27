@@ -109,17 +109,23 @@ ggsave(here("Output","TempSeason.png"), height = 6, width  = 4)
 ### Calculate the average raw speed per deployment ####
 RawSpeed<-PP_raw %>%
    group_by(Site, Year, Deployment, date)%>%
-  summarise(Speed_mean = mean(Raw_Speed_UP, na.rm = TRUE)) %>%
+  summarise(Speed_mean = mean(Raw_Speed_UP, na.rm = TRUE),
+            Depth_m = mean(Depth_UP, na.rm = TRUE),
+            Solar_m = mean(mean_solar_rad_kwpm2, na.rm = TRUE)) %>%
   group_by(Site, Year, Deployment) %>% # get average by deployment
   summarise(Flow_mean = mean(Speed_mean, na.rm = TRUE),
             Flow_SE = sd(Speed_mean, na.rm = TRUE)/n(),
+            Depth_mean = mean(Depth_m, na.rm = TRUE),
+            Depth_SE = sd(Depth_m, na.rm = TRUE)/sqrt(n()),
+            Solar_mean = mean(Solar_m, na.rm = TRUE),
+            Solar_SE = sd(Solar_m, na.rm = TRUE)/sqrt(n()),
             meandate = mean(date, na.rm = TRUE)) %>% # get mean date to be able to easily extract month
   mutate(Month = month(meandate),
          Month = case_when(Month==1~1,
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
-  select(Site, Year, Flow_mean, Flow_SE, Month) %>%
+  select(Site, Year, Flow_mean, Flow_SE, Month, Depth_mean, Depth_SE, Solar_mean, Solar_SE) %>%
   droplevels()%>%
   mutate(monthname = ifelse(Month == 1, "January","June"))
 
@@ -146,6 +152,16 @@ ggsave(here("Output","Physics.png"), width = 5, height = 10)
 Physics_deploy <-IntLight %>%
   left_join(Temp_deploy)%>%
   left_join(RawSpeed) %>%
-  select(Site, Year, Month = monthname,TotalPAR_mean, TotalPAR_SE, Temp_mean:Flow_SE)
+  select(Site, Year, Month = monthname,TotalPAR_mean, TotalPAR_SE, Temp_mean:Solar_SE)
 
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
+
+ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Solar_mean, color = Month))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = Solar_mean-Solar_SE,xmax = Solar_mean+Solar_SE ))+
+  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))
+
+ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Depth_mean, color = Month))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = Depth_mean-Depth_SE,xmax = Depth_mean+Depth_SE))+
+  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))
