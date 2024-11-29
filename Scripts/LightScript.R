@@ -11,6 +11,9 @@ library(patchwork)
 ## Season colors
 Cols_seasons<-c("#F27F0c","#429ebd")
 
+## read in gump weather ####
+weather<-read_csv(here("Data","Gump_MetData_Daily_average_20240222.csv"))
+
 ### bring in raw PAR data
 
 ## Raw oxygen data -- this file is huge
@@ -156,12 +159,73 @@ Physics_deploy <-IntLight %>%
 
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
 
-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Solar_mean, color = Month))+
-  geom_point()+
+pl1<-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Solar_mean))+
+  geom_point(aes(color = Month))+
+  geom_smooth(method = "lm")+
   geom_errorbarh(aes(xmin = Solar_mean-Solar_SE,xmax = Solar_mean+Solar_SE ))+
-  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))
+  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))+
+  theme_bw()+
+  theme(legend.position = "none")
 
-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Depth_mean, color = Month))+
-  geom_point()+
+pl2<-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = Depth_mean))+
+  geom_point(aes(color =Month))+
+  geom_smooth(method = "lm")+
   geom_errorbarh(aes(xmin = Depth_mean-Depth_SE,xmax = Depth_mean+Depth_SE))+
-  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))
+  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))+
+  theme_bw()+
+  theme(legend.position = "none")
+
+pl3<-ggplot(Physics_deploy, aes(x = Year, y = Depth_mean))+
+  geom_point(aes(color =Month))+
+  geom_smooth(method = "lm")+
+  labs(y = "Depth (m)")+
+  geom_errorbar(aes(ymin = Depth_mean-Depth_SE,ymax = Depth_mean+Depth_SE), width = 0)+
+  theme_bw()
+
+pl1|pl2|pl3+plot_layout(guides = "collect")
+ggsave(here("Output","Light-depth.png"), width = 10, height = 8)
+
+weather %>%
+  mutate(year = year(time_local),
+         month = month(time_local),
+         year_month = round_date(time_local, "month"))%>%
+       #  year_month = paste(year,"-",month))%>% 
+  filter(mean_solar_rad_kwpm2>0)%>%
+  group_by(year_month)%>%
+  summarise(mean_solar = mean(mean_solar_rad_kwpm2, na.rm = TRUE))%>%
+  ggplot(aes(x = year_month, y = mean_solar))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(x = "Time",
+       y = expression(paste("Mean Monthly Solar Radiation (kw m"^-2,")")))+
+  theme_bw()
+
+petedata<-read_csv(here("Data","In_Situ_Light_20240216.csv"))
+
+petedata %>%
+  mutate(date = ymd(`DateTime_GMT-07:00`),
+         yearmonth = round_date(date, "month"))%>%
+  group_by(yearmonth)%>%
+  summarise(mean_light = mean(MAX_surface_PAR, na.rm = TRUE))%>%
+  ggplot(aes(x = yearmonth, y = mean_light))+
+  geom_point()
+
+pH<-read_csv(here("Data","MCR_pH.csv"))
+
+pH_mean<-pH %>%
+  mutate(date = mdy_hm(timestamp_gmt),
+         monthyear = round_date(date, "month"),
+         Month = month(date, abbr = FALSE, label = TRUE),
+         Year = year(date))%>%
+  filter(ph_totalscale>7.5,
+         ph_totalscale<9)%>%
+  group_by(Year, Month)%>%
+  summarise(pHmean = mean(ph_totalscale, na.rm = TRUE))
+
+pH_mean%>%
+  ggplot(aes(x = month, y = pHmean))+
+  geom_point()
+
+Physics_deploy<-Physics_deploy %>%
+  left_join(pH_mean)
+write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
