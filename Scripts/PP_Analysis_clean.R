@@ -192,7 +192,7 @@ All_coverliving<-Benthic_summary_Algae %>%
         panel.grid.minor = element_blank())
 
 (LTER1_cover|All_cover+ theme(legend.position = "none")+ plot_layout(guides = "collect"))/(LTER1_coverliving+All_coverliving)
-ggsave(here("Output","AllCoverData.png"), width = 8, height = 8)
+ggsave(here("Output","AllCoverData.pdf"), width = 8, height = 8)
 
 ## Calculate the total percent of calcifiers
 Total_Calc<-Benthic_summary_Algae %>%
@@ -553,8 +553,32 @@ WinterData<-LTER1 %>%
 SummerData<-LTER1 %>%
   filter(Month == "January")
 
-# Temperature
+# total macroproducers -  only done one time of year
 set.seed(23)
+AliveMod<-brm(alive_scale~Year , data = WinterData, 
+                    control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+AliveMod_Coefs <- summary(AliveMod)$fixed %>%
+  mutate(Month = "Winter",
+         Parameter = "Macroproducers",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+# calcifiers
+CalcMod<-brm(calc_scale~Year , data = WinterData, 
+              control = list(adapt_delta = 0.92), iter = 3000)
+
+#extract the parameters
+CalcMod_Coefs <- summary(CalcMod)$fixed %>%
+  mutate(Month = "Winter",
+         Parameter = "Calcifiers",
+         coef = rownames(.)) %>%
+  as_tibble()
+
+
+# Temperature
+
 TempMod_winter<-brm(Temp_scale~Year , data = WinterData, 
             control = list(adapt_delta = 0.92), iter = 3000)
 
@@ -621,11 +645,14 @@ EnviroCoefs<-bind_rows(Temp_summer_Coefs,
           Light_summer_Coefs,
           Light_winter_Coefs,
           Flow_summer_Coefs,
-          Flow_winter_Coefs)
+          Flow_winter_Coefs,
+          AliveMod_Coefs,
+          CalcMod_Coefs)
 
 
 EnviroCoefs %>%
   filter(coef == "Year")%>%
+  mutate(Parameter = factor(Parameter, levels = c("Flow","Temperature","Light","Calcifiers","Macroproducers")))%>%
   ggplot(aes(x = Estimate, y = Parameter, color = Month))+
   geom_vline(xintercept = 0)+
   geom_point(size = 4, position = position_dodge(0.15))+
@@ -643,6 +670,7 @@ EnviroCoefs %>%
 ggsave(filename = "Output/EnviroCoefs.pdf", width = 8, height = 5)
 
 #### show the predictions, but with the raw data##############
+
 TempMod_winter<-brm(Temp_mean~Year , data = WinterData, 
                     control = list(adapt_delta = 0.92), iter = 3000)
 
