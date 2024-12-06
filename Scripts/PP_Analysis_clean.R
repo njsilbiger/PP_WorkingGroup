@@ -113,7 +113,8 @@ LTER1_cover<-Benthic_summary_Algae %>%
         legend.position = c(0.71, 0.9),
         legend.background = element_blank(),
         legend.text = element_text(size = 12),
-        axis.text.x = element_blank())
+        axis.text.x = element_blank(),
+        panel.grid.minor = element_blank())
 
 All_cover<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
@@ -121,7 +122,7 @@ All_cover<-Benthic_summary_Algae %>%
   summarise(mean_all = mean(mean_cover, na.rm = TRUE),
             se_all = sd(mean_cover, na.rm = TRUE)/sqrt(n()))%>%
   ggplot(aes(x = Year, y = mean_all, color = name))+
-  geom_ribbon(aes(ymin = mean_all-se_all, ymax = mean_all+se_all, fill = name), alpha = 0.5, linetype = 0)+
+  geom_ribbon(aes(ymin = mean_all-se_all, ymax = mean_all+se_all, fill = name), alpha = 0.3, linetype = 0)+
 #  geom_point()+
   #geom_errorbar(aes(ymin = mean_all-se_all, ymax = mean_all+se_all), width = 0.1)+
   geom_line(size = 1, show.legend = FALSE)+
@@ -137,7 +138,8 @@ All_cover<-Benthic_summary_Algae %>%
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         axis.text.x = element_blank(),
-        axis.text.y = element_blank())
+        axis.text.y = element_blank(),
+        panel.grid.minor = element_blank())
   
 LTER1_cover|All_cover+ theme(legend.position = "none")+ plot_layout(guides = "collect")
 
@@ -160,7 +162,8 @@ LTER1_coverliving<-Benthic_summary_Algae %>%
        )+
   theme_bw()+
   theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
+        axis.text = element_text(size = 12),
+        panel.grid.minor = element_blank())
 # All sites
 All_coverliving<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
@@ -174,7 +177,7 @@ All_coverliving<-Benthic_summary_Algae %>%
   ggplot(aes(x = Year, y = mean_all))+
   geom_line(size = 1)+
   geom_ribbon(aes(x = Year, ymin = mean_all - se_all, ymax = mean_all + se_all),
-              fill = "grey", alpha = 0.5)+
+              fill = "grey", alpha = 0.3)+
   scale_y_continuous(limits = c(0,40))+
   labs(x = "",
        y = "",
@@ -185,7 +188,8 @@ All_coverliving<-Benthic_summary_Algae %>%
   theme_bw()+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
-        axis.text.y = element_blank())
+        axis.text.y = element_blank(),
+        panel.grid.minor = element_blank())
 
 (LTER1_cover|All_cover+ theme(legend.position = "none")+ plot_layout(guides = "collect"))/(LTER1_coverliving+All_coverliving)
 ggsave(here("Output","AllCoverData.png"), width = 8, height = 8)
@@ -238,7 +242,8 @@ LTER1<-Benthic_summary %>%
   full_join(PP)  %>%
   filter(Site == "LTER 1") %>%
   drop_na(Month) %>%
-  droplevels()
+  droplevels() %>%
+  left_join(Physics_deploy)
 
 ###### Bayesian Analysis for metabolism #######
 set.seed(23)
@@ -289,9 +294,9 @@ plotdata_GPP<-as_tibble(density(draws_GPP$b_Year)) %>%
 
 # Figure showing prosterior for R being negative
 GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) + 
-   geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+   geom_vline(xintercept = 0, lty = 2, alpha = 0.7, linewidth = 1.3)+
   geom_area(data = filter(plotdata_GPP, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_GPP, variable == 'On'), fill = 'light blue') +
+  geom_area(data = filter(plotdata_GPP, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.015, label = "P(1) \n GP is declining over time")+
@@ -301,7 +306,8 @@ GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) +
   theme_bw()
 
 GPPplot<-GPP_pred+GPP_dens&theme(axis.text = element_text(size = 16),
-                              axis.title = element_text(size = 18))
+                              axis.title = element_text(size = 18),
+                              panel.grid.minor = element_blank())
 
 # Respiration model
 RMod<-brm(-daily_R~Year + (1|Month), data = LTER1, 
@@ -346,10 +352,10 @@ plotdata_R<-as_tibble(density(draws_R$b_Year)) %>%
 
 # Figure showing prosterior for R being negative
 R_dens<-ggplot(plotdata_R, aes(x, y)) + 
-  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7, linewidth = 1.3)+
   # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
   geom_area(data = filter(plotdata_R, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_R, variable == 'On'), fill = 'light blue') +
+  geom_area(data = filter(plotdata_R, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.025, label = "P(0.998) \n R is declining over time")+
@@ -359,12 +365,13 @@ R_dens<-ggplot(plotdata_R, aes(x, y)) +
   theme_bw()
 
 Respplot<-R_pred+R_dens&theme(axis.text = element_text(size = 16),
-                        axis.title = element_text(size = 18))
+                        axis.title = element_text(size = 18),
+                        panel.grid.minor = element_blank())
 
 # Net prodiction model ####
 NPMod<-brm(daily_NPP~Year + (1|Month), data = LTER1, 
            control = list(adapt_delta = 0.92), iter = 3000)
-plot(NPMod)
+#plot(NPMod)
 summary(NPMod)
 fit<-predict(NPMod)
 NPP_coeff<-summary(NPMod)$fixed # pullout the fixed effects
@@ -408,7 +415,7 @@ NPP_dens<-ggplot(plotdata, aes(x, y)) +
   geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
   # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
   geom_area(data = filter(plotdata, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata, variable == 'On'), fill = 'light blue') +
+  geom_area(data = filter(plotdata, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.035, label = "P(0.934) \n NEP is declining over time")+
@@ -432,16 +439,18 @@ SE_NEC<-round(NEC_coeff$Est.Error[2],2) #error
 
 NEC_0_Year <- round(-NEC_coeff$Estimate[1]/NEC_coeff$Estimate[2])
 
+
 # NEC model
 data_NEC<-conditional_effects(NECMod, "Year:Month",re_formula = NULL)$Year
 
 NEC_pred<-ggplot()+
-  geom_line(data = data_NEC, aes(x = effect1__, y = estimate__, color = effect2__), size = 1.2)+
-  geom_ribbon(data = data_NEC, aes(x = effect1__, ymin = lower__, ymax = upper__, fill = effect2__),
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_line(data = data_NEC %>% filter(effect2__ == "January"), aes(x = effect1__, y = estimate__, color = effect2__), size = 1.2, show.legend = FALSE)+
+  geom_ribbon(data = data_NEC%>% filter(effect2__ == "January"), aes(x = effect1__, ymin = lower__, ymax = upper__, fill = effect2__),
                alpha = 0.3)+
   geom_point(data = LTER1, aes(x = Year, y = daily_NEC, color = Month), size = 2)+
   scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
-  scale_fill_manual(values = c("#ffbe4f","#0ea7b5"))+
+  scale_fill_manual(values = c("#ffbe4f","#0ea7b5"), guide = FALSE)+
   labs(color = "",
        fill = "",
        x = "Year",
@@ -467,9 +476,10 @@ plotdata_NEC<-as_tibble(density(draws_NEC$b_Year)) %>%
 
 # Figure showing prosterior for R being negative
 NEC_dens<-ggplot(plotdata_NEC, aes(x, y)) + 
-  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7,
+             linewidth = 1.3)+
   geom_area(data = filter(plotdata_NEC, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill = 'light blue') +
+  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
   annotate("text", x = 27.5, y = 0.015, label = "P(0.99) \n NEC is declining over time")+
@@ -478,11 +488,51 @@ NEC_dens<-ggplot(plotdata_NEC, aes(x, y)) +
        y = "Density")+
   theme_bw()
 
+
+## If we just looked at total with no interaction how would the slope change?
+NECMod_total<-brm(daily_NEC~Year, data =LTER1 , 
+                  control = list(adapt_delta = 0.92, max_treedepth = 20), iter = 3000)
+summary(NECMod_total)
+NEC_coeff_total<-summary(NECMod_total)$fixed # pullout the fixed effects
+
+slop_NEC_total<-round(NEC_coeff_total$Estimate[2],2) #slope
+SE_NEC_total<-round(NEC_coeff_total$Est.Error[2],2) #error
+
+draws_NEC_total<-NECMod_total %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+
+# calculate proportion < 0
+draws_NEC_total %>%
+  mutate(lessthan = ifelse(b_Year<0,1,0)) %>%
+  count(lessthan) %>%
+  reframe(prop = n[lessthan == 1]/sum(n))
+
+# probability of 1 that NEP is declining over time
+plotdata_NEC_total<-as_tibble(density(draws_NEC_total$b_Year)) %>%
+  mutate(variable = ifelse(x<0, "On","Off"))
+
+# Figure showing prosterior for R being negative
+NEC_dens_total<-ggplot(plotdata_NEC_total, aes(x, y)) + 
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_area(data = filter(plotdata_NEC_total, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_NEC_total, variable == 'On'), fill = 'grey') +
+  geom_line(linewidth = 1.3) +
+  xlim(-100,50)+
+  annotate("text", x = 27.5, y = 0.015, label = "P(0.90) \n NEC is declining over time")+
+  annotate("text", x = slop_NEC_total, y = 0.06, label = paste(slop_NEC_total,"\u00B1",SE_NEC))+
+  labs(x = "Change in NEC per year",
+       y = "Density")+
+  theme_bw()
+
+
+
 NECplot<-NEC_pred+NEC_dens&theme(axis.text = element_text(size = 16),
-                                 axis.title = element_text(size = 18))
+                                 axis.title = element_text(size = 18),
+                                 panel.grid.minor = element_blank())
 
 GPPplot/Respplot/NECplot
-ggsave(filename = "Output/BayesRegression2.png", width = 14, height = 14)
+ggsave(filename = "Output/BayesRegression2.pdf", width = 14, height = 14)
 
 #### Bayesian analysis for environmental data #######
 LTER1 <-LTER1 %>% # add in scaled data
@@ -590,7 +640,7 @@ EnviroCoefs %>%
         axis.title = element_text(size = 18),
         legend.text = element_text(size = 16))
   
-ggsave(filename = "Output/EnviroCoefs.png", width = 8, height = 5)
+ggsave(filename = "Output/EnviroCoefs.pdf", width = 8, height = 5)
 
 #### show the predictions, but with the raw data##############
 TempMod_winter<-brm(Temp_mean~Year , data = WinterData, 
@@ -649,7 +699,7 @@ Flow_pred<-ggplot()+
   theme(legend.position = "none")
 
 Temp_pred/Light_pred/Flow_pred
-ggsave(here("Output","WinterEnviro_pred.png"), width = 5, height = 10)
+ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 10)
 
 ##### Look for the drivers of GPP#############
 ## macro producers + Temp + Light + Flow (scaled) + (1|month)
@@ -659,7 +709,7 @@ ggsave(here("Output","WinterEnviro_pred.png"), width = 5, height = 10)
 GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
                         control = list(adapt_delta = 0.92), iter = 5000)
 
-plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
+#plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
 
 GPP_enviro_coef<-summary(GPP_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
@@ -685,7 +735,7 @@ GPP_coef_plot<-GPP_enviro_mod %>%
 R_enviro_mod<-brm(-daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data = LTER1, 
                     control = list(adapt_delta = 0.92), iter = 5000)
 
-plot(conditional_effects(R_enviro_mod, re_formula =NULL), points = TRUE)
+#plot(conditional_effects(R_enviro_mod, re_formula =NULL), points = TRUE)
 
 R_enviro_coef<-summary(R_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
@@ -712,7 +762,7 @@ R_coef_plot<-R_enviro_mod %>%
 C_enviro_mod<-brm(daily_NEC~calc_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
                     control = list(adapt_delta = 0.92), iter = 5000)
 
-plot(conditional_effects(C_enviro_mod, re_formula =NULL), points = TRUE)
+#plot(conditional_effects(C_enviro_mod, re_formula =NULL), points = TRUE)
 
 C_enviro_coef<-summary(C_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
@@ -736,7 +786,7 @@ C_coef_plot<-C_enviro_mod %>%
 
 
 GPP_coef_plot|R_coef_plot|C_coef_plot
-ggsave(here("Output","CoefPlot_enviro_metab.png"), width = 14, height = 5)
+ggsave(here("Output","CoefPlot_enviro_metab.pdf"), width = 14, height = 5)
 
 # MAKE A PLOT COMPARING ESTIMATES OF CHANGE OVER TIME HERE TO OTHER DATASETS AROUND THE WORLD
 
