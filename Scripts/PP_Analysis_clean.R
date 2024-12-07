@@ -726,8 +726,44 @@ Flow_pred<-ggplot()+
   theme_bw()+
   theme(legend.position = "none")
 
-Temp_pred/Light_pred/Flow_pred
-ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 10)
+# macroproducers
+AliveMod<-brm(mean_alive~Year , data = WinterData, 
+              control = list(adapt_delta = 0.92), iter = 3000)
+
+data_macro<-conditional_effects(AliveMod, "Year",re_formula = NULL)$Year
+
+alive_pred<-ggplot()+
+  geom_line(data = data_macro, aes(x = effect1__, y = estimate__), size = 1.2)+
+  geom_ribbon(data = data_macro, aes(x = effect1__, ymin = lower__, ymax = upper__),
+              fill = "#A1AEB1", alpha = 0.3)+
+  geom_point(data = LTER1 %>% filter(Month == "June"), 
+             aes(x = Year, y = mean_alive), size = 2, color = "#0ea7b5")+
+  labs(x = "Year",
+       y = "Macroproducer cover (%)")+
+  theme_bw()+
+  theme(legend.position = "none")
+
+# Calcifiers
+# macroproducers
+CalcMod<-brm(total_Calc~Year , data = WinterData, 
+              control = list(adapt_delta = 0.92), iter = 3000)
+
+data_calc<-conditional_effects(CalcMod, "Year",re_formula = NULL)$Year
+
+calc_pred<-ggplot()+
+  geom_line(data = data_calc, aes(x = effect1__, y = estimate__), size = 1.2)+
+  geom_ribbon(data = data_calc, aes(x = effect1__, ymin = lower__, ymax = upper__),
+              fill = "#A1AEB1", alpha = 0.3)+
+  geom_point(data = LTER1 %>% filter(Month == "June"), 
+             aes(x = Year, y = total_Calc), size = 2, color = "#0ea7b5")+
+  labs(x = "Year",
+       y = "Calcifier cover (%)")+
+  theme_bw()+
+  theme(legend.position = "none")
+
+
+Temp_pred/Light_pred/Flow_pred/alive_pred/calc_pred
+ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 12)
 
 ##### Look for the drivers of GPP#############
 ## macro producers + Temp + Light + Flow (scaled) + (1|month)
@@ -738,6 +774,9 @@ GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale +(1|
                         control = list(adapt_delta = 0.92), iter = 5000)
 
 #plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
+# visualize the pairs to inspect for multicollinearity
+GP_pairs<-pairs(GPP_enviro_mod)
+ggsave(here("Output","GP_pairs.png"), plot = GP_pairs)
 
 GPP_enviro_coef<-summary(GPP_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
@@ -764,6 +803,8 @@ R_enviro_mod<-brm(-daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data =
                     control = list(adapt_delta = 0.92), iter = 5000)
 
 #plot(conditional_effects(R_enviro_mod, re_formula =NULL), points = TRUE)
+R_pairs<-pairs(R_enviro_mod)
+ggsave(here("Output","R_pairs.png"), plot = R_pairs)
 
 R_enviro_coef<-summary(R_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
@@ -787,10 +828,13 @@ R_coef_plot<-R_enviro_mod %>%
 
 # Calcification
 # GPP
-C_enviro_mod<-brm(daily_NEC~calc_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
-                    control = list(adapt_delta = 0.92), iter = 5000)
+C_enviro_mod<-brm(bf(daily_NEC~calc_scale+Temp_scale+Light_scale+Flow_scale +(1|Month), decomp = "QR") , data = LTER1, 
+                    control = list(adapt_delta = 0.96), iter = 5000)
 
 #plot(conditional_effects(C_enviro_mod, re_formula =NULL), points = TRUE)
+NEC_pairs<-pairs(C_enviro_mod)
+ggsave(here("Output","C_pairs.png"), plot = NEC_pairs)
+
 
 C_enviro_coef<-summary(C_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
