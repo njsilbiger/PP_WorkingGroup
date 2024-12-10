@@ -827,21 +827,50 @@ R_coef_plot<-R_enviro_mod %>%
         axis.title.x = element_text(size = 16))
 
 # Calcification
-# GPP
-C_enviro_mod<-brm(bf(daily_NEC~calc_scale+Temp_scale+Light_scale+Flow_scale +(1|Month), decomp = "QR") , data = LTER1, 
+
+C_enviro_mod<-brm(bf(daily_NEC~Month*(calc_scale+Temp_scale+Light_scale+Flow_scale),
+                     decomp = "QR") , data = LTER1, 
                     control = list(adapt_delta = 0.96), iter = 5000)
 
 #plot(conditional_effects(C_enviro_mod, re_formula =NULL), points = TRUE)
 NEC_pairs<-pairs(C_enviro_mod)
 ggsave(here("Output","C_pairs.png"), plot = NEC_pairs)
 
+get_variables(C_enviro_mod)
 
-C_enviro_coef<-summary(C_enviro_mod)$fixed[2:5,]%>%
+C_enviro_coef_all<-summary(C_enviro_mod)$fixed[3:10,]%>%
+  mutate(Parameter = row.names(.))%>%
+  as_tibble()
+
+# all the coefs with the interactions 
+C_coef_plot_all<-C_enviro_mod %>%
+  spread_draws(b_Light_scale, b_calc_scale, b_Temp_scale, b_Flow_scale,
+               `b_MonthJune:Light_scale`, `b_MonthJune:calc_scale`, `b_MonthJune:Temp_scale`, `b_MonthJune:Flow_scale`) %>%
+  rename(Light = b_Light_scale, Cover =b_calc_scale,
+         Temperature = b_Temp_scale, Flow = b_Flow_scale,
+         Light_June =`b_MonthJune:Light_scale`,
+         Cover_June = `b_MonthJune:calc_scale`,
+         Temp_June = `b_MonthJune:Temp_scale`,
+         Flow_June = `b_MonthJune:Flow_scale`)%>%
+  pivot_longer(Light:Flow_June)%>%
+  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  stat_halfeye(.width = c(.90, .5))+
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("gray80", "skyblue"))+
+  labs(x = "Net ecosystem calcification (daytime)",
+       y = "")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text = element_text(size = 14),
+        axis.title.x = element_text(size = 16))
+
+C_enviro_coef<-summary(C_enviro_mod)$fixed[3:6,]%>%
   mutate(Parameter = row.names(.))%>%
   as_tibble()
 
 C_coef_plot<-C_enviro_mod %>%
-  spread_draws(b_Light_scale, b_calc_scale, b_Temp_scale, b_Flow_scale) %>%
+  spread_draws(b_Light_scale, b_calc_scale, b_Temp_scale, b_Flow_scale
+                ) %>%
   rename(Light = b_Light_scale, Cover =b_calc_scale,
          Temperature = b_Temp_scale, Flow = b_Flow_scale)%>%
   pivot_longer(Light:Flow)%>%
@@ -855,7 +884,6 @@ C_coef_plot<-C_enviro_mod %>%
   theme(legend.position = "none",
         axis.text = element_text(size = 14),
         axis.title.x = element_text(size = 16))
-
 
 GPP_coef_plot|R_coef_plot|C_coef_plot
 ggsave(here("Output","CoefPlot_enviro_metab.pdf"), width = 14, height = 5)
