@@ -11,6 +11,22 @@ library(patchwork)
 ## Season colors
 Cols_seasons<-c("#F27F0c","#429ebd")
 
+## bring in cloud and PAR data from remote sensing
+clouds<-read_csv(here("Data","clouds_MODIS.csv")) %>%
+  mutate(date = mdy_hm(time),
+         Year = year(date),
+         Month = as.numeric(month(date)))%>%
+  select(-c(time,date))
+
+PAR<-read_csv(here("Data","MCR_PAR_MODIS.csv")) %>%
+  rename(Year = year, Month = month) %>%
+  select(!day)%>%
+  mutate(Month = as.numeric(Month))
+
+clouds <- clouds %>%
+  left_join(PAR)
+
+
 ## read in gump weather ####
 weather<-read_csv(here("Data","Gump_MetData_Daily_average_20240222.csv"))
 
@@ -123,12 +139,13 @@ RawSpeed<-PP_raw %>%
             Solar_mean = mean(Solar_m, na.rm = TRUE),
             Solar_SE = sd(Solar_m, na.rm = TRUE)/sqrt(n()),
             meandate = mean(date, na.rm = TRUE)) %>% # get mean date to be able to easily extract month
-  mutate(Month = month(meandate),
-         Month = case_when(Month==1~1,
+  mutate(Month = month(meandate)) %>%
+  left_join(clouds)%>%
+  mutate(Month = case_when(Month==1~1,
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
-  select(Site, Year, Flow_mean, Flow_SE, Month, Depth_mean, Depth_SE, Solar_mean, Solar_SE) %>%
+  select(Site, Year, Flow_mean, Flow_SE, Month, Depth_mean, Depth_SE, Solar_mean, Solar_SE, mean_clouds,mean_MO_par) %>%
   droplevels()%>%
   mutate(monthname = ifelse(Month == 1, "January","June"))
 
@@ -155,7 +172,7 @@ ggsave(here("Output","Physics.png"), width = 5, height = 10)
 Physics_deploy <-IntLight %>%
   left_join(Temp_deploy)%>%
   left_join(RawSpeed) %>%
-  select(Site, Year, Month = monthname,TotalPAR_mean, TotalPAR_SE, Temp_mean:Solar_SE)
+  select(Site, Year, Month = monthname,TotalPAR_mean, TotalPAR_SE, Temp_mean:mean_MO_par)
 
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
 
@@ -181,6 +198,17 @@ pl3<-ggplot(Physics_deploy, aes(x = Year, y = Depth_mean))+
   labs(y = "Depth (m)")+
   geom_errorbar(aes(ymin = Depth_mean-Depth_SE,ymax = Depth_mean+Depth_SE), width = 0)+
   theme_bw()
+
+pl4<-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = mean_MO_par))+
+  geom_point(aes(color = Month))+
+  geom_smooth(method = "lm")+
+  #eom_errorbarh(aes(xmin = Solar_mean-Solar_SE,xmax = Solar_mean+Solar_SE ))+
+  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))+
+  labs(x = "Mean Monthly PAR from MODIS",
+       y = "Mean PAR from Reef")+
+  theme_bw()+
+  theme(legend.position = "none")
+
 
 pl1|pl2|pl3+plot_layout(guides = "collect")
 ggsave(here("Output","Light-depth.png"), width = 10, height = 8)
