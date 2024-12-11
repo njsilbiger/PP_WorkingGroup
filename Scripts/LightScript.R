@@ -209,6 +209,16 @@ pl4<-ggplot(Physics_deploy, aes(y = TotalPAR_mean, x = mean_MO_par))+
   theme_bw()+
   theme(legend.position = "none")
 
+ggplot(Physics_deploy, aes(x = Year, y = mean_MO_par))+
+  geom_point(aes(color = Month))+
+  geom_smooth(method = "lm")+
+  #eom_errorbarh(aes(xmin = Solar_mean-Solar_SE,xmax = Solar_mean+Solar_SE ))+
+#  geom_errorbar(aes(ymin = TotalPAR_mean-TotalPAR_SE,ymax = TotalPAR_mean+TotalPAR_SE ))+
+  labs(x = "Year",
+       y = "Mean PAR MODIS")+
+  theme_bw()+
+  theme(legend.position = "none")
+
 
 pl1|pl2|pl3+plot_layout(guides = "collect")
 ggsave(here("Output","Light-depth.png"), width = 10, height = 8)
@@ -257,3 +267,14 @@ pH_mean%>%
 Physics_deploy<-Physics_deploy %>%
   left_join(pH_mean)
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
+
+clouds %>%
+  group_by(Year)%>%
+  summarise(mean_cloud = mean(mean_clouds, na.rm = TRUE),
+            mean_PAR = mean(mean_MO_par, na.rm = TRUE))%>%
+  ggplot(aes(x = Year, y = mean_PAR))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(y = "Mean PAR from MODIS")+
+  theme_bw()
+ggsave(here("Output","MODIS_PAR.png"))
