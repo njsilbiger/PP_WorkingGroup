@@ -268,7 +268,7 @@ Physics_deploy<-Physics_deploy %>%
   left_join(pH_mean)
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
 
-clouds %>%
+p1<-clouds %>%
   group_by(Year)%>%
   summarise(mean_cloud = mean(mean_clouds, na.rm = TRUE),
             mean_PAR = mean(mean_MO_par, na.rm = TRUE))%>%
@@ -277,4 +277,36 @@ clouds %>%
   geom_smooth(method = "lm")+
   labs(y = "Mean PAR from MODIS")+
   theme_bw()
+
 ggsave(here("Output","MODIS_PAR.png"))
+
+#p1a<-clouds %>%
+ # group_by(Year, Month)%>%
+#  filter(Month %in% c(1,6))%>%
+#  mutate(Month = factor(Month))%>%
+ # summarise(mean_cloud = mean(mean_clouds, na.rm = TRUE),
+  #          mean_PAR = mean(mean_MO_par, na.rm = TRUE))%>%
+  #ggplot(aes(x = Year, y = mean_PAR, color = Month))+
+  #geom_point()+
+  #geom_smooth(method = "lm")+
+  #labs(y = "Mean PAR from MODIS")+
+  #theme_bw()
+
+
+p2<-Physics_deploy %>%
+  ggplot((aes(x = Year, y = TotalPAR_mean, color = Month)))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(y = "Total daily PAR subsurface")+
+  theme_bw()+
+  theme(legend.position  = "none")
+
+p3<-Physics_deploy %>%
+  ggplot((aes(x = Year, y = Solar_mean, color = Month)))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  labs(y = "Mean Solar Radiation Gump")+
+  theme_bw()
+
+p1|p2|p3 + plot_layout(guides = "collect")
+ggsave(here("Output","PARall.png"), width = 10, height = 5)
