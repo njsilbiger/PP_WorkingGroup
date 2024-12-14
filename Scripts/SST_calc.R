@@ -74,7 +74,11 @@ SST_year<-OISST_data %>%
          Month = month(t)) %>%
   group_by(Year)%>%
   summarise(mean_SST = mean(temp, na.rm = TRUE),
-            max_SST = max(temp, na.rm = TRUE)) 
+            max_SST = max(temp, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(Year_Benthic = Year - 1) # the benthic data should be last years temperature driving the change
+
+
 SST_year %>%
   ggplot(aes(x = Year, y = mean_SST))+
   geom_point()+

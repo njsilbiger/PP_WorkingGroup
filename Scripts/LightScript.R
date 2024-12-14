@@ -23,9 +23,21 @@ PAR<-read_csv(here("Data","MCR_PAR_MODIS.csv")) %>%
   select(!day)%>%
   mutate(Month = as.numeric(Month))
 
-clouds <- clouds %>%
-  left_join(PAR)
+# bring in monthly SST
+monthly_sst<-read_csv(here("Data","SST_year_month.csv"))
+yearly_sst<-read_csv(here("Data","SST_year.csv"))
 
+clouds <- clouds %>%
+  left_join(PAR) %>%
+  left_join(monthly_sst)
+
+clouds %>% 
+  ggplot(aes(x = mean_SST, y = mean_clouds))+
+  geom_point()+
+  labs(y = "Mean Monthy Cloud Cover",
+       x = "Mean Monthly SST"~degree~"C)")+
+  theme_bw()
+ggsave(here("Output","temp_clouds.png"), height = 6, width = 6)
 
 ## read in gump weather ####
 weather<-read_csv(here("Data","Gump_MetData_Daily_average_20240222.csv"))
@@ -145,7 +157,7 @@ RawSpeed<-PP_raw %>%
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
-  select(Site, Year, Flow_mean, Flow_SE, Month, Depth_mean, Depth_SE, Solar_mean, Solar_SE, mean_clouds,mean_MO_par) %>%
+  select(Site, Year, Flow_mean, Flow_SE, Month, Depth_mean, Depth_SE, Solar_mean, Solar_SE, mean_clouds,mean_MO_par,mean_SST, max_SST ) %>%
   droplevels()%>%
   mutate(monthname = ifelse(Month == 1, "January","June"))
 
@@ -172,7 +184,8 @@ ggsave(here("Output","Physics.png"), width = 5, height = 10)
 Physics_deploy <-IntLight %>%
   left_join(Temp_deploy)%>%
   left_join(RawSpeed) %>%
-  select(Site, Year, Month = monthname,TotalPAR_mean, TotalPAR_SE, Temp_mean:mean_MO_par)
+  select(Site, Year, Month = monthname,TotalPAR_mean, 
+         TotalPAR_SE, Temp_mean:max_SST)
 
 write_csv(Physics_deploy,here("Data","Physics_deploy.csv"))       
 
@@ -229,6 +242,7 @@ weather %>%
          year_month = round_date(time_local, "month"))%>%
        #  year_month = paste(year,"-",month))%>% 
   filter(mean_solar_rad_kwpm2>0)%>%
+  filter(!year %in% c(2021,2022))%>%
   group_by(year_month)%>%
   summarise(mean_solar = mean(mean_solar_rad_kwpm2, na.rm = TRUE))%>%
   ggplot(aes(x = year_month, y = mean_solar))+
@@ -261,7 +275,7 @@ pH_mean<-pH %>%
   summarise(pHmean = mean(ph_totalscale, na.rm = TRUE))
 
 pH_mean%>%
-  ggplot(aes(x = month, y = pHmean))+
+  ggplot(aes(x = Month, y = pHmean))+
   geom_point()
 
 Physics_deploy<-Physics_deploy %>%
@@ -308,6 +322,23 @@ p3<-Physics_deploy %>%
   labs(y = "Mean Solar Radiation Gump")+
   theme_bw()
 
+p4<-clouds %>%
+  mutate(Season = case_when(Month %in% c(12,1,2)~"Summer",
+                           Month %in% c(3,4,5)~"Fall",
+                           Month %in% c(6,7,8)~"Winter",
+                           Month %in% c(9,10,11)~"Spring"))%>%
+  #group_by(Year)%>%
+  #summarise(mean_cloud = mean(mean_clouds, na.rm = TRUE),
+   #         mean_PAR = mean(mean_MO_par, na.rm = TRUE),
+    #        mean_sst = mean(mean_SST))%>%
+  ggplot(aes(y = mean_MO_par, x = mean_clouds, color = factor(Month)))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  #labs(y = "mean cloud")+
+  theme_bw()+
+  facet_wrap(~Season, scales = "free")
+
+
 p1|p2|p3 + plot_layout(guides = "collect")
 ggsave(here("Output","PARall.png"), width = 10, height = 5)
 
@@ -330,6 +361,8 @@ Physics_deploy %>%
   ggplot(aes(x = Year, y = value, color = Site))+
   geom_point()+
   facet_wrap(Month~name, scales = "free_y")
+
+
 ### correlate Pete's data with Gump.. Nest Modis/Gump/In Situ from Bob and see if these are relatedc
 # Look at Tahiti data for solar radiation
 # Look at Aerosols
