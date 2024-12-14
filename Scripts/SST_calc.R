@@ -76,7 +76,7 @@ SST_year<-OISST_data %>%
   summarise(mean_SST = mean(temp, na.rm = TRUE),
             max_SST = max(temp, na.rm = TRUE)) %>%
   ungroup() %>%
-  mutate(Year_Benthic = Year - 1) # the benthic data should be last years temperature driving the change
+  mutate(Year_Benthic = Year + 1) # the benthic data should be last years temperature driving the change
 
 
 SST_year %>%

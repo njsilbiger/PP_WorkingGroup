@@ -30,6 +30,9 @@ PP<-read_csv(here("Data","PP_Data.csv"))%>%
 ## Read in the deployment physics Data (light, temperature, and flow rate at time of collection) 
 Physics_deploy <-read_csv(here("Data","Physics_deploy.csv"))
 
+## Bring in the yearly SST data 
+yearly_sst<-read_csv(here("Data","SST_year.csv"))
+
 # Read in Benthic data 
 # Benthic Cover data
 BenthicCover <- read_csv(here("Data","Backreef_Data.csv"))%>%
@@ -205,6 +208,17 @@ TotalLiving<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
   group_by(Year, Site)%>%
   summarise(mean_alive = sum(mean_cover))
+
+# plot relationship between sst and percent cover of macroproducers
+TotalLiving %>%
+  filter(Site == "LTER 1")%>%
+  left_join(yearly_sst %>% 
+              select(-Year)%>%
+              rename(Year = Year_Benthic)%>%
+              mutate(Year = Year+1))%>%
+  ggplot(aes(y = mean_alive, x = mean_SST))+
+  geom_point()+
+  geom_smooth(method = "lm")
 
 # Bring together PP and deployment physics data
 PP <- PP %>%
