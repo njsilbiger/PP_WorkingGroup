@@ -773,6 +773,9 @@ ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 12)
 GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
                         control = list(adapt_delta = 0.92), iter = 5000)
 
+GPP_enviro_mod2<-brm(daily_GPP~alive_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
+                    control = list(adapt_delta = 0.95), iter = 6000)
+
 #plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
 # visualize the pairs to inspect for multicollinearity
 GP_pairs<-pairs(GPP_enviro_mod)
@@ -781,6 +784,11 @@ ggsave(here("Output","GP_pairs.png"), plot = GP_pairs)
 GPP_enviro_coef<-summary(GPP_enviro_mod)$fixed[2:5,]%>%
   mutate(Parameter = row.names(.))%>%
   as_tibble()
+
+GPP_enviro_coef2<-summary(GPP_enviro_mod2)$fixed[2:4,]%>%
+  mutate(Parameter = row.names(.))%>%
+  as_tibble()
+
 
 GPP_coef_plot<-GPP_enviro_mod %>%
   spread_draws(b_Light_scale, b_alive_scale, b_Temp_scale, b_Flow_scale) %>%
@@ -798,6 +806,22 @@ GPP_coef_plot<-GPP_enviro_mod %>%
         axis.text = element_text(size = 14),
         axis.title.x = element_text(size = 16))
   
+GPP_coef_plot2<-GPP_enviro_mod2 %>%
+  spread_draws(b_Light_scale, b_alive_scale, b_Flow_scale) %>%
+  rename(Light = b_Light_scale, Cover =b_alive_scale,
+         Flow = b_Flow_scale)%>%
+  pivot_longer(Light:Flow)%>%
+  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  stat_halfeye(.width = c(.90, .5))+
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("gray80", "skyblue"))+
+  labs(x = "Gross Photosynthesis",
+       y = "")+
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text = element_text(size = 14),
+        axis.title.x = element_text(size = 16))
+
 # Respiration
 R_enviro_mod<-brm(-daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data = LTER1, 
                     control = list(adapt_delta = 0.92), iter = 5000)
@@ -889,4 +913,39 @@ GPP_coef_plot|R_coef_plot|C_coef_plot
 ggsave(here("Output","CoefPlot_enviro_metab.pdf"), width = 14, height = 5)
 
 # MAKE A PLOT COMPARING ESTIMATES OF CHANGE OVER TIME HERE TO OTHER DATASETS AROUND THE WORLD
+
+BothSites<-Benthic_summary_Algae %>%
+  pivot_wider(names_from = name, values_from = mean_cover)%>%
+  mutate(mean_alive = sum(Coral, `Crustose Corallines`, `Fleshy Macroalgae`))%>%
+  full_join(PP)  %>%
+  #filter(Site == "LTER 1") %>%
+  drop_na(Month) %>%
+  droplevels() %>%
+  left_join(Physics_deploy)
+
+BothSites %>%
+  ggplot(aes(x = mean_alive, y= daily_GPP))+
+  geom_point(aes(color = Site))+
+  geom_smooth(method = "lm")
+  
+
+testboth<-lmer(daily_GPP ~ mean_alive+TotalPAR_mean+Temp_mean+Flow_mean +(1|Site/Month), data = BothSites)
+anova(testboth)
+summary(testboth)
+
+testboth_R<-lmer(-daily_R ~ mean_alive+Temp_mean+Flow_mean +(1|Site/Month), data = BothSites)
+anova(testboth_R)
+summary(testboth_R)
+
+testboth_NEC<-lmer(daily_NEC ~ mean_alive+Temp_mean+Flow_mean +(1|Site/Month), data = BothSites)
+anova(testboth_NEC)
+summary(testboth_NEC)
+
+LTER1 %>%
+  ggplot(aes(x = Temp_mean, y= daily_NPP))+
+  geom_point(aes(color = Month))+
+  geom_smooth(method = "lm")
+
+
+### Look at total fish biomass data from backreef over time
 

@@ -310,3 +310,34 @@ p3<-Physics_deploy %>%
 
 p1|p2|p3 + plot_layout(guides = "collect")
 ggsave(here("Output","PARall.png"), width = 10, height = 5)
+
+
+Physics_deploy %>% 
+  ggplot(aes(x = mean_MO_par, y = mean_clouds, color = Month))+
+  geom_point()+facet_wrap(~Month, scales = "free")
+
+Physics_deploy %>% 
+  ggplot(aes(y = TotalPAR_mean, x = mean_clouds, color = Month))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month, scales = "free")
+
+
+
+Physics_deploy %>%
+  select(Temp_mean, TotalPAR_mean, Flow_mean, Year, Month, Site)%>%
+  pivot_longer(Temp_mean:Flow_mean) %>%
+  ggplot(aes(x = Year, y = value, color = Site))+
+  geom_point()+
+  facet_wrap(Month~name, scales = "free_y")
+### correlate Pete's data with Gump.. Nest Modis/Gump/In Situ from Bob and see if these are relatedc
+# Look at Tahiti data for solar radiation
+# Look at Aerosols
+# Look at UPF data
+# aerosol optical depth
+# ARGO floats also have light
+# Look at HIMB 
+# Send GPS points for 20 High volcanic islands to Stephane to extract MODIS data
+# Look at Heron Island Data and Lizard
+# Look into PAR and crop yields changing
+# Look at IPCC working group on solar radiation
