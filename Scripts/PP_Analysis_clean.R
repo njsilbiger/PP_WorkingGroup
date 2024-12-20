@@ -962,4 +962,30 @@ LTER1 %>%
 
 
 ### Look at total fish biomass data from backreef over time
+# This is in the fish script and there is no change
 
+mod<-lm(mean_SST~Year, data = yearly_sst)
+anova(mod)
+moddata<-augment(mod)%>%
+  mutate(Year = as.integer(Year))
+
+yearly_sst %>%
+  mutate(Year = as.integer(Year))%>%
+  ggplot(aes(x = Year, y = mean_SST))+
+  geom_point()+
+  geom_line(data = moddata, aes(x = Year, y = .fitted))+
+  geom_smooth(method = "lm")+
+  labs( 
+       x = 'Year', 
+       y = 'Mean Temperature'~degree~"C)") +
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))
+ggsave(here("Output","TempYear.png"), width = 5, height = 6)
+
+yearly_sst %>%
+  filter(Year == 2007)
+
+min(yearly_sst$mean_SST)
+
+27.53-26.2
