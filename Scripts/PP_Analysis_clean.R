@@ -1230,17 +1230,21 @@ moddata<-augment(mod)%>%
 
 yearly_sst %>%
   mutate(Year = as.integer(Year))%>%
-  ggplot(aes(x = Year, y = mean_SST))+
-  geom_point()+
-  geom_line(data = moddata, aes(x = Year, y = .fitted))+
-  geom_smooth(method = "lm")+
+  ggplot(aes(x = Year, y = mean_SST, color = mean_SST))+
+#  geom_line(data = moddata, aes(x = Year, y = .fitted), color = "black")+
+  geom_smooth(method = "lm", color = "black")+
+  geom_point(size = 3)+
   labs( 
        x = 'Year', 
-       y = 'Mean Temperature'~degree~"C)") +
+       y = 'Mean Temperature ('~degree~"C)") +
+  scale_color_gradient(low = "#0091ff", high = "#f0650e", guide = NULL)+
   theme_bw()+
   theme(axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14))
-ggsave(here("Output","TempYear.png"), width = 5, height = 6)
+        axis.text = element_text(size = 14),
+        panel.grid.minor = element_blank()
+        )
+
+ggsave(here("Output","TempYear.pdf"), width = 5, height = 6)
 
 yearly_sst %>%
   filter(Year == 2007)
