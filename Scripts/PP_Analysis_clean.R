@@ -18,6 +18,10 @@ library(lme4)
 library(lmerTest)
 library(brms)
 library(tidybayes)
+library(broom)
+library(broom.mixed)
+library(projpred)
+library(ggsci)
 
 ## Read in the different data sheets ####
 
@@ -784,11 +788,12 @@ ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 12)
 
 ## All scaled in the models
 # GPP
+LTER1_NA<-LTER1 %>%
+  drop_na(daily_GPP)
+
 GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
                         control = list(adapt_delta = 0.92), iter = 5000)
 
-GPP_enviro_mod2<-brm(daily_GPP~alive_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
-                    control = list(adapt_delta = 0.95), iter = 6000)
 
 #plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
 # visualize the pairs to inspect for multicollinearity
@@ -796,10 +801,6 @@ GP_pairs<-pairs(GPP_enviro_mod)
 ggsave(here("Output","GP_pairs.png"), plot = GP_pairs)
 
 GPP_enviro_coef<-summary(GPP_enviro_mod)$fixed[2:5,]%>%
-  mutate(Parameter = row.names(.))%>%
-  as_tibble()
-
-GPP_enviro_coef2<-summary(GPP_enviro_mod2)$fixed[2:4,]%>%
   mutate(Parameter = row.names(.))%>%
   as_tibble()
 
@@ -820,23 +821,103 @@ GPP_coef_plot<-GPP_enviro_mod %>%
         axis.text = element_text(size = 14),
         axis.title.x = element_text(size = 16))
   
-GPP_coef_plot2<-GPP_enviro_mod2 %>%
-  spread_draws(b_Light_scale, b_alive_scale, b_Flow_scale) %>%
-  rename(Light = b_Light_scale, Cover =b_alive_scale,
-         Flow = b_Flow_scale)%>%
-  pivot_longer(Light:Flow)%>%
-  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
-  stat_halfeye(.width = c(.90, .5))+
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("gray80", "skyblue"))+
-  labs(x = "Gross Photosynthesis",
-       y = "")+
-  theme_bw()+
-  theme(legend.position = "none",
-        axis.text = element_text(size = 14),
-        axis.title.x = element_text(size = 16))
 
-# Respiration
+### Projection predictive feature selection
+
+## proj pred https://mc-stan.org/projpred/articles/projpred.html
+refm_obj<-get_refmodel(GPP_enviro_mod) # get the reference model
+
+# Refit the reference model K times: -  we can use this to see how many times each variable shows up in the model
+cv_fits <- run_cvfun(
+  refm_obj,
+  ### Only for the sake of speed (not recommended in general):
+  K = 25 # run this for 25 cross-validation folds (leaves one out for 25 times, and sample size is 26)
+  ###
+)
+
+# Final cv_varsel() run:
+#cv_varsel() performs a cross-validation (CV) using the kfold fits above for variable selection.
+cvvs_gpp <- cv_varsel(
+  refm_obj,
+  cv_method = "kfold",
+  cvfits = cv_fits,
+  nterms_max = 5,
+  #parallel = TRUE,
+  verbose = FALSE
+  ### 
+)
+# plot the results
+plot(cvvs_gpp, stats = "mlpd", deltas = TRUE) # mean log predictive density
+msize<-suggest_size(cvvs_gpp, stat = "mlpd") # suggest model size
+smmry <- summary(cvvs_gpp, stats = "mlpd", type = c("mean", "lower", "upper"),
+                 deltas = TRUE)
+print(smmry, digits = 1)
+rk <- ranking(cvvs_gpp)
+pr_rk <- cv_proportions(rk) 
+plot(pr_rk)
+( predictors_final <- head(rk[["fulldata"]], msize) )
+plot(cv_proportions(rk, cumulate = TRUE))
+
+# extract the proportions of models that each predictor is present in models <1 to <5 predictors
+GPP_proportions <-cv_proportions(rk, cumulate = TRUE)[1:5,] %>%
+  as_tibble() %>%
+  mutate(No_variables = 1:5)
+
+## Make a barplot showing which variables are present in which model
+#GPP_proportions %>%
+#  pivot_longer(cols = alive_scale:Flow_scale) %>%
+#  ggplot(aes(x = No_variables, y = value, fill = name))+
+#  geom_col()
+
+
+# post-selection inference
+prj <- project(
+  refm_obj,
+  predictor_terms = predictors_final,
+  ### In interactive use, we recommend not to deactivate the verbose mode:
+  verbose = FALSE
+  ###
+)
+prj_mat <- as.matrix(prj)
+
+# look at the posterios
+prj_drws <- as_draws_matrix(prj_mat)
+prj_smmry <- summarize_draws(
+  prj_drws,
+  "median", "mad", function(x) quantile(x, probs = c(0.025, 0.975))
+)
+# Coerce to a `data.frame` because pkgdown versions > 1.6.1 don't print the
+# tibble correctly:
+prj_smmry <- as.data.frame(prj_smmry)
+print(prj_smmry, digits = 1)
+# plot the posterior
+bayesplot_theme_set(ggplot2::theme_bw())
+mcmc_intervals(prj_mat) +
+  ggplot2::coord_cartesian(xlim = c(0,1500))
+
+# now with the 2-dimentional
+refm_mat <- as.matrix(GPP_enviro_mod)
+mcmc_intervals(refm_mat, pars = colnames(prj_mat)) +
+  mcmc_intervals(prj_mat) +
+  ggplot2::coord_cartesian(xlim = c(0,1500))
+
+
+ dat_gauss_new <- setNames(
+  as.data.frame(replicate(length(predictors_final), c(-1, 0, 1))),
+  predictors_final
+) 
+
+prj_predict <- proj_predict(prj)
+
+prj_linpred <- proj_linpred(prj, newdata = dat_gauss_new, integrated = TRUE)
+cbind(dat_gauss_new, linpred = as.vector(prj_linpred$pred))
+
+# posterio predictive checks
+ppc_dens_overlay(y = LTER1_NA$daily_GPP[1:26], yrep = prj_predict)# the last 3 values are cut off for some reason
+
+
+
+# Respiration ############################
 R_enviro_mod<-brm(-daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data = LTER1, 
                     control = list(adapt_delta = 0.92), iter = 5000)
 
@@ -863,6 +944,55 @@ R_coef_plot<-R_enviro_mod %>%
   theme(legend.position = "none",
         axis.text = element_text(size = 14),
         axis.title.x = element_text(size = 16))
+
+
+## variable selection for respiration
+## proj pred https://mc-stan.org/projpred/articles/projpred.html
+LTER1<-LTER1 %>%
+  mutate(neg_daily_R =-daily_R )
+
+R_enviro_mod<-brm(neg_daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data = LTER1, 
+                  control = list(adapt_delta = 0.92), iter = 5000)
+
+refm_obj<-get_refmodel(R_enviro_mod) # get the reference model
+
+# Refit the reference model K times: -  we can use this to see how many times each variable shows up in the model
+cv_fits <- run_cvfun(
+  refm_obj,
+  ### Only for the sake of speed (not recommended in general):
+  K = 25 # run this for 25 cross-validation folds (leaves one out for 25 times, and sample size is 26)
+  ###
+)
+
+# Final cv_varsel() run:
+#cv_varsel() performs a cross-validation (CV) using the kfold fits above for variable selection.
+cvvs_r <- cv_varsel(
+  refm_obj,
+  cv_method = "kfold",
+  cvfits = cv_fits,
+  nterms_max = 4,
+  #parallel = TRUE,
+  verbose = FALSE
+  ### 
+)
+
+# plot the results
+plot(cvvs_r, stats = "mlpd", deltas = TRUE) # mean log predictive density
+msize<-suggest_size(cvvs_r, stat = "mlpd") # suggest model size
+smmry <- summary(cvvs_r, stats = "mlpd", type = c("mean", "lower", "upper"),
+                 deltas = TRUE)
+print(smmry, digits = 1)
+rk <- ranking(cvvs_r)
+pr_rk <- cv_proportions(rk) 
+plot(pr_rk)
+( predictors_final <- head(rk[["fulldata"]], msize) )
+plot(cv_proportions(rk, cumulate = TRUE))
+
+# extract the proportions of models that each predictor is present in models <1 to <5 predictors
+R_proportions <-cv_proportions(rk, cumulate = TRUE)[1:4,] %>%
+  as_tibble() %>%
+  mutate(No_variables = 1:4)
+
 
 # Calcification
 
@@ -926,6 +1056,86 @@ C_coef_plot<-C_enviro_mod %>%
 GPP_coef_plot|R_coef_plot|C_coef_plot
 ggsave(here("Output","CoefPlot_enviro_metab.pdf"), width = 14, height = 5)
 
+refm_obj<-get_refmodel(C_enviro_mod) # get the reference model
+
+# Refit the reference model K times: -  we can use this to see how many times each variable shows up in the model
+cv_fits <- run_cvfun(
+  refm_obj,
+  ### Only for the sake of speed (not recommended in general):
+  K = 15 # run this for 15 cross-validation folds (sample size here is 18)
+  ###
+)
+
+# Final cv_varsel() run:
+#cv_varsel() performs a cross-validation (CV) using the kfold fits above for variable selection.
+cvvs_c <- cv_varsel(
+  refm_obj,
+  cv_method = "kfold",
+  cvfits = cv_fits,
+  nterms_max = 15,
+  #parallel = TRUE,
+  verbose = FALSE
+  ### 
+)
+
+# plot the results
+plot(cvvs_c, stats = "mlpd", deltas = TRUE) # mean log predictive density
+msize<-suggest_size(cvvs_c, stat = "mlpd") # suggest model size
+smmry <- summary(cvvs_c, stats = "mlpd", type = c("mean", "lower", "upper"),
+                 deltas = TRUE)
+print(smmry, digits = 1)
+rk <- ranking(cvvs_c)
+pr_rk <- cv_proportions(rk) 
+plot(pr_rk)
+( predictors_final <- head(rk[["fulldata"]], msize) )
+plot(cv_proportions(rk, cumulate = TRUE))
+
+# extract the proportions of models that each predictor is present in models <1 to <5 predictors
+C_proportions <-cv_proportions(rk, cumulate = TRUE)[1:9,] %>%
+  as_tibble() %>%
+  mutate(No_variables = 1:9)
+
+
+## Bring together the proportions selected
+Allproportions<-GPP_proportions %>%
+  pivot_longer(alive_scale:Flow_scale)%>%
+  mutate(model = "Gross Photosynthesis") %>%
+  bind_rows(
+    R_proportions %>%
+      pivot_longer(alive_scale:Flow_scale)%>%
+      mutate(model = "Respiration")
+  )%>%
+  bind_rows(
+    C_proportions %>%
+      pivot_longer(Light_scale:`Month:Temp_scale`)%>%
+      mutate(model = "Calcification")
+  )
+
+
+Allproportions %>%
+  filter(No_variables == 1,
+         value >0) %>% # just bring out top ranking variables
+  mutate(Variable = case_when(name == "alive_scale" ~ "% cover of macroproducers",
+                              name == "Flow_scale" ~ "Flow",
+                              name == "Light_scale" ~ "Light",
+                              name == "Temp_scale" ~ "Temperature"))%>%
+  mutate(model = factor(model, levels = c("Gross Photosynthesis", "Respiration", "Calcification")),
+         Variable = factor(Variable, levels =  c("% cover of macroproducers","Light","Temperature","Flow")
+                            ))%>%
+  ggplot(aes(x = model, y = value*100, fill = Variable))+
+  geom_col()+
+  labs(x = "",
+       y = " % present in cross-validated variable selection ",
+       fill = "")+
+  scale_fill_npg()+
+  theme_classic()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14),
+        legend.text = element_text(size = 14),
+        legend.position = "top")
+
+ggsave(here("Output","Var_Selection.pdf"), width = 7, height = 6)
 # MAKE A PLOT COMPARING ESTIMATES OF CHANGE OVER TIME HERE TO OTHER DATASETS AROUND THE WORLD
 
 BothSites<-Benthic_summary_Algae %>%
@@ -951,9 +1161,22 @@ testboth_R<-lmer(-daily_R ~ mean_alive+Temp_mean+Flow_mean +(1|Site/Month), data
 anova(testboth_R)
 summary(testboth_R)
 
-testboth_NEC<-lmer(daily_NEC ~ mean_alive+Temp_mean+Flow_mean +(1|Site/Month), data = BothSites)
+testboth_NEC<-lmer(daily_NEC ~ Month*(mean_alive+Temp_mean+Flow_mean) +(1|Site), data = BothSites)
 anova(testboth_NEC)
 summary(testboth_NEC)
+
+BothSites %>%
+  ggplot(aes(x = total_Calc, y = daily_NEC))+
+  geom_point(aes(color = Site))+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Month)
+
+BothSites %>%
+  ggplot(aes(x = Year, y = daily_NEC))+
+  geom_point(aes(color = Site))+
+  geom_smooth(method = "lm")
+  facet_wrap(~Month)
+
 
 LTER1 %>%
   ggplot(aes(x = Temp_mean, y= daily_NPP))+
