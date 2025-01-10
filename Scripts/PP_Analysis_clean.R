@@ -106,19 +106,25 @@ LTER1_cover<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"),
          Site == "LTER 1")%>%
   ggplot(aes(x = Year, y = mean_cover, color = name))+
-#  geom_point()+
+  geom_point(size = 2)+
   geom_line(size = 1)+
   scale_color_manual(values = c("#CC7161","lightpink","darkgreen"))+
+  geom_text(data = tibble(Year = c(2007, 2017, 2014.5), 
+                          name = c("Coral","Crustose Corallines","Fleshy Macroalgae"), 
+                          mean_cover = c(33,20,0)),
+            aes(x = Year, y = mean_cover, label = name))+
   labs(x = "",
-       y = "Percent Cover (%)",
+       y = "Cover (%)",
        color = "",
        title = "LTER 1 only")+
   scale_y_continuous(limits = c(0,40))+
+ # scale_x_continuous(limits = c(2008, 2025))+
   theme_bw()+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
-        legend.position = c(0.71, 0.9),
-        legend.background = element_blank(),
+   #     legend.position = c(0.71, 0.9),
+        legend.position = "none",
+    #    legend.background = element_blank(),
         legend.text = element_text(size = 12),
         axis.text.x = element_blank(),
         panel.grid.minor = element_blank())
@@ -130,7 +136,7 @@ All_cover<-Benthic_summary_Algae %>%
             se_all = sd(mean_cover, na.rm = TRUE)/sqrt(n()))%>%
   ggplot(aes(x = Year, y = mean_all, color = name))+
   geom_ribbon(aes(ymin = mean_all-se_all, ymax = mean_all+se_all, fill = name), alpha = 0.3, linetype = 0)+
-#  geom_point()+
+  geom_point(size = 2)+
   #geom_errorbar(aes(ymin = mean_all-se_all, ymax = mean_all+se_all), width = 0.1)+
   geom_line(size = 1, show.legend = FALSE)+
   scale_color_manual(values = c("#CC7161","lightpink","darkgreen"))+
@@ -160,10 +166,12 @@ LTER1_coverliving<-Benthic_summary_Algae %>%
   group_by(Year)%>%
   summarise(mean_alive = sum(mean_cover)) %>%
   ggplot(aes(x = Year, y = mean_alive))+
-  geom_line(size = 1)+
+  geom_line(size = 1, alpha = 0.2, lty = 2)+
+  geom_point(size = 2)+
+  geom_smooth(method = "lm", color = "black")+
   scale_y_continuous(limits = c(0,40))+
   labs(x = "",
-       y = "Percent Cover of living macro-producers (%)",
+       y = "Cover of living macro-producers (%)",
        color = "",
       # title = "LTER 1 only"
        )+
@@ -183,6 +191,10 @@ All_coverliving<-Benthic_summary_Algae %>%
   ungroup()%>%
   ggplot(aes(x = Year, y = mean_all))+
   geom_line(size = 1)+
+#  geom_line(size = 1, alpha = 0.2, lty = 2)+
+  geom_point(size = 2)+
+#  geom_smooth(method = "lm", color = "black")+
+  
   geom_ribbon(aes(x = Year, ymin = mean_all - se_all, ymax = mean_all + se_all),
               fill = "grey", alpha = 0.3)+
   scale_y_continuous(limits = c(0,40))+
@@ -291,7 +303,7 @@ GPP_pred<-ggplot()+
   labs(x = "Year",
        y =bquote(atop("Gross Photosynthesis",
                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
-  annotate("text", x = 2020, y = 2000, label = paste("GP = 0 in Year",GPP_0_Year))+
+ # annotate("text", x = 2020, y = 2000, label = paste("GP = 0 in Year",GPP_0_Year))+
   theme_bw()+
   theme(legend.position = "none")
 
@@ -308,17 +320,19 @@ draws_GPP %>%
 
 # probability of 1 that NEP is declining over time
 plotdata_GPP<-as_tibble(density(draws_GPP$b_Year)) %>%
-  mutate(variable = ifelse(x<0, "On","Off"))
+  mutate(variable = ifelse(x > -82 & x < -28.31, "On","Off")) # -82.17    -28.31
 
-# Figure showing prosterior for R being negative
+# Figure showing prosterior for GPP
 GPP_dens<-ggplot(plotdata_GPP, aes(x, y)) + 
    geom_vline(xintercept = 0, lty = 2, alpha = 0.7, linewidth = 1.3)+
-  geom_area(data = filter(plotdata_GPP, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_GPP, variable == 'On'), fill = 'grey') +
+ # geom_area(data = filter(plotdata_GPP, variable == 'Off'), fill = 'grey', alpha = 0.5) + 
+  geom_area(data = filter(plotdata_GPP, variable == 'On'), fill =  "skyblue", alpha = 0.5) +
   geom_line(linewidth = 1.3) +
   xlim(-100,50)+
-  annotate("text", x = 27.5, y = 0.015, label = "P(1) \n GP is declining over time")+
-  annotate("text", x = slop_GPP, y = 0.03, label = paste(slop_GPP,"\u00B1",SE_GPP))+
+  geom_line(data = tibble(x = -55.29, y = c(0,0.029)), aes(x=x, y=y), color = "skyblue", linewidth = 2)+
+ # scale_fill_manual(values = c("gray80", "skyblue"))+
+#  annotate("text", x = 27.5, y = 0.015, label = "P(1) \n GP is declining over time")+
+#  annotate("text", x = slop_GPP, y = 0.03, label = paste(slop_GPP,"\u00B1",SE_GPP))+
   labs(x = "Change in GP per year",
        y = "Density")+
   theme_bw()
@@ -349,7 +363,7 @@ R_pred<-ggplot()+
   labs(x = "Year",
        y =bquote(atop("Respiration",
                       "(mmol" ~ O[2]~m^-2~d^-1~")")))+
-  annotate("text", x = 2020, y = 1300, label = paste("R = 0 in Year",R_0_Year))+
+#  annotate("text", x = 2020, y = 1300, label = paste("R = 0 in Year",R_0_Year))+
   theme_bw()+
   theme(legend.position = "none")
 
@@ -366,18 +380,21 @@ draws_R %>%
 
 # probability of 0.998 that NEP is declining over time
 plotdata_R<-as_tibble(density(draws_R$b_Year)) %>%
-  mutate(variable = ifelse(x<0, "On","Off"))
+  mutate(variable = ifelse(x > -58 & x < -14, "On","Off"))
+
+# probability of 1 that NEP is declining over time
 
 # Figure showing prosterior for R being negative
 R_dens<-ggplot(plotdata_R, aes(x, y)) + 
   geom_vline(xintercept = 0, lty = 2, alpha = 0.7, linewidth = 1.3)+
   # geom_vline(xintercept = slop_NPP, lty = 2, alpha = 0.7)+
-  geom_area(data = filter(plotdata_R, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_R, variable == 'On'), fill = 'grey') +
+  geom_area(data = filter(plotdata_R, variable == 'On'), fill =  "skyblue", alpha = 0.5) +
+#  geom_area(data = filter(plotdata_R, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
+  geom_line(data = tibble(x = -36.4, y = c(0,0.0355)), aes(x=x, y=y), color = "skyblue", linewidth = 2)+
   xlim(-100,50)+
-  annotate("text", x = 27.5, y = 0.025, label = "P(0.998) \n R is declining over time")+
-  annotate("text", x = slop_R, y = 0.04, label = paste(slop_R,"\u00B1",SE_R))+
+#  annotate("text", x = 27.5, y = 0.025, label = "P(0.998) \n R is declining over time")+
+#  annotate("text", x = slop_R, y = 0.04, label = paste(slop_R,"\u00B1",SE_R))+
   labs(x = "Change in R per year",
        y = "Density")+
   theme_bw()
@@ -457,7 +474,6 @@ SE_NEC<-round(NEC_coeff$Est.Error[2],2) #error
 
 NEC_0_Year <- round(-NEC_coeff$Estimate[1]/NEC_coeff$Estimate[2])
 
-
 # NEC model
 data_NEC<-conditional_effects(NECMod, "Year:Month",re_formula = NULL)$Year
 
@@ -474,9 +490,12 @@ NEC_pred<-ggplot()+
        x = "Year",
        y =bquote(atop("Net Ecosystem Calcification",
                       "(mmol" ~ CaCO[3]~m^-2~d^-1~")")))+
-  annotate("text", x = 2020, y = 500, label = paste("NEC = 0 in Year",NEC_0_Year))+
+#  annotate("text", x = 2020, y = 500, label = paste("NEC = 0 in Year",NEC_0_Year))+
   theme_bw()+
-  theme(legend.position = c(.15,.8))
+  theme(#legend.position = c(.15,.8),
+        legend.position = "bottom",
+        legend.text = element_text(size = 14)
+  )
 
 draws_NEC<-NECMod %>%
   spread_draws(b_Year) %>%
@@ -488,20 +507,22 @@ draws_NEC %>%
   count(lessthan) %>%
   reframe(prop = n[lessthan == 1]/sum(n))
 
-# probability of 1 that NEP is declining over time
+# probability of 1 that NEC is declining over time
 plotdata_NEC<-as_tibble(density(draws_NEC$b_Year)) %>%
-  mutate(variable = ifelse(x<0, "On","Off"))
+  mutate(variable = ifelse(x > -39.88 & x < -11.61, "On","Off"))
 
 # Figure showing prosterior for R being negative
 NEC_dens<-ggplot(plotdata_NEC, aes(x, y)) + 
   geom_vline(xintercept = 0, lty = 2, alpha = 0.7,
              linewidth = 1.3)+
-  geom_area(data = filter(plotdata_NEC, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill = 'grey') +
+  #geom_area(data = filter(plotdata_NEC, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill =  "skyblue", alpha = 0.5) +
+#  geom_area(data = filter(plotdata_NEC, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
+  geom_line(data = tibble(x = -25.62, y = c(0,0.056)), aes(x=x, y=y), color = "skyblue", linewidth = 2)+
   xlim(-100,50)+
-  annotate("text", x = 27.5, y = 0.015, label = "P(0.99) \n NEC is declining over time")+
-  annotate("text", x = slop_NEC, y = 0.06, label = paste(slop_NEC,"\u00B1",SE_NEC))+
+ # annotate("text", x = 27.5, y = 0.015, label = "P(0.99) \n NEC is declining over time")+
+#  annotate("text", x = slop_NEC, y = 0.06, label = paste(slop_NEC,"\u00B1",SE_NEC))+
   labs(x = "Change in NEC per year",
        y = "Density")+
   theme_bw()
@@ -528,24 +549,24 @@ draws_NEC_total %>%
 
 # probability of 1 that NEP is declining over time
 plotdata_NEC_total<-as_tibble(density(draws_NEC_total$b_Year)) %>%
-  mutate(variable = ifelse(x<0, "On","Off"))
+  mutate(variable = ifelse(x > -24.87 & x < 5.21, "On","Off"))
 
 # Figure showing prosterior for R being negative
 NEC_dens_total<-ggplot(plotdata_NEC_total, aes(x, y)) + 
   geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
-  geom_area(data = filter(plotdata_NEC_total, variable == 'Off'), fill = 'grey') + 
-  geom_area(data = filter(plotdata_NEC_total, variable == 'On'), fill = 'grey') +
+#  geom_area(data = filter(plotdata_NEC_total, variable == 'Off'), fill = 'grey') + 
+  geom_area(data = filter(plotdata_NEC_total, variable == 'On'), fill =  "skyblue", alpha = 0.5) +
+ # geom_area(data = filter(plotdata_NEC_total, variable == 'On'), fill = 'grey') +
   geom_line(linewidth = 1.3) +
+  geom_line(data = tibble(x = -9.69, y = c(0,0.0505)), aes(x=x, y=y), color = "skyblue", linewidth = 2)+
   xlim(-100,50)+
-  annotate("text", x = 27.5, y = 0.015, label = "P(0.90) \n NEC is declining over time")+
-  annotate("text", x = slop_NEC_total, y = 0.06, label = paste(slop_NEC_total,"\u00B1",SE_NEC))+
+ # annotate("text", x = 27.5, y = 0.015, label = "P(0.90) \n NEC is declining over time")+
+#  annotate("text", x = slop_NEC_total, y = 0.06, label = paste(slop_NEC_total,"\u00B1",SE_NEC))+
   labs(x = "Change in NEC per year",
        y = "Density")+
   theme_bw()
 
-
-
-NECplot<-NEC_pred+NEC_dens&theme(axis.text = element_text(size = 16),
+NECplot<-NEC_pred+NEC_dens_total&theme(axis.text = element_text(size = 16),
                                  axis.title = element_text(size = 18),
                                  panel.grid.minor = element_blank())
 
@@ -810,10 +831,14 @@ GPP_coef_plot<-GPP_enviro_mod %>%
   rename(Light = b_Light_scale, Cover =b_alive_scale,
          Temperature = b_Temp_scale, Flow = b_Flow_scale)%>%
   pivot_longer(Light:Flow)%>%
-  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  ggplot(aes(y = name, x = value,
+         #    fill = after_stat(x < 0)
+         ),
+         fill = "gray80"
+         ) +
   stat_halfeye(.width = c(.90, .5))+
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("gray80", "skyblue"))+
+  #scale_fill_manual(values = c("gray80", "skyblue"))+
   labs(x = "Gross Photosynthesis",
        y = "")+
   theme_bw()+
@@ -934,10 +959,14 @@ R_coef_plot<-R_enviro_mod %>%
   rename(Cover =b_alive_scale,
          Temperature = b_Temp_scale, Flow = b_Flow_scale)%>%
   pivot_longer(Cover:Flow)%>%
-  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  ggplot(aes(y = name, x = value,
+             #fill = after_stat(x < 0)
+             ),
+         fill = "gray80"
+         ) +
   stat_halfeye(.width = c(.90, .5))+
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("gray80", "skyblue"))+
+#  scale_fill_manual(values = c("gray80", "skyblue"))+
   labs(x = "Respiration",
        y = "")+
   theme_bw()+
@@ -1021,10 +1050,14 @@ C_coef_plot_all<-C_enviro_mod %>%
          Temp_June = `b_MonthJune:Temp_scale`,
          Flow_June = `b_MonthJune:Flow_scale`)%>%
   pivot_longer(Light:Flow_June)%>%
-  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  ggplot(aes(y = name, x = value,
+             #fill = after_stat(x < 0)
+             ),
+         fill = "gray80"
+         ) +
   stat_halfeye(.width = c(.90, .5))+
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("gray80", "skyblue"))+
+  #scale_fill_manual(values = c("gray80", "skyblue"))+
   labs(x = "Net ecosystem calcification (daytime)",
        y = "")+
   theme_bw()+
@@ -1042,10 +1075,13 @@ C_coef_plot<-C_enviro_mod %>%
   rename(Light = b_Light_scale, Cover =b_calc_scale,
          Temperature = b_Temp_scale, Flow = b_Flow_scale)%>%
   pivot_longer(Light:Flow)%>%
-  ggplot(aes(y = name, x = value,fill = after_stat(x < 0))) +
+  ggplot(aes(y = name, x = value,
+             #fill = after_stat(x < 0)
+             ),
+         fill = "gray80") +
   stat_halfeye(.width = c(.90, .5))+
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = c("gray80", "skyblue"))+
+  #scale_fill_manual(values = c("gray80", "skyblue"))+
   labs(x = "Net ecosystem calcification (daytime)",
        y = "")+
   theme_bw()+
