@@ -22,6 +22,8 @@ library(broom)
 library(broom.mixed)
 library(projpred)
 library(ggsci)
+library(posterior)
+library(bayesplot)
 
 ## Read in the different data sheets ####
 
@@ -938,9 +940,7 @@ prj_linpred <- proj_linpred(prj, newdata = dat_gauss_new, integrated = TRUE)
 cbind(dat_gauss_new, linpred = as.vector(prj_linpred$pred))
 
 # posterio predictive checks
-ppc_dens_overlay(y = LTER1_NA$daily_GPP[1:26], yrep = prj_predict)# the last 3 values are cut off for some reason
-
-
+ppc_dens_overlay(y = LTER1_NA$daily_GPP, yrep = prj_predict)# the last 3 values are cut off for some reason
 
 # Respiration ############################
 R_enviro_mod<-brm(-daily_R~alive_scale+Temp_scale+Flow_scale +(1|Month) , data = LTER1, 
@@ -988,7 +988,6 @@ refm_obj<-get_refmodel(R_enviro_mod) # get the reference model
 # Refit the reference model K times: -  we can use this to see how many times each variable shows up in the model
 cv_fits <- run_cvfun(
   refm_obj,
-  ### Only for the sake of speed (not recommended in general):
   K = 25 # run this for 25 cross-validation folds (leaves one out for 25 times, and sample size is 26)
   ###
 )
@@ -1134,7 +1133,7 @@ C_proportions <-cv_proportions(rk, cumulate = TRUE)[1:9,] %>%
 
 ## Bring together the proportions selected
 Allproportions<-GPP_proportions %>%
-  pivot_longer(alive_scale:Flow_scale)%>%
+  pivot_longer(alive_scale:`(1 | Month)`)%>%
   mutate(model = "Gross Photosynthesis") %>%
   bind_rows(
     R_proportions %>%
@@ -1154,9 +1153,10 @@ Allproportions %>%
   mutate(Variable = case_when(name == "alive_scale" ~ "% cover of macroproducers",
                               name == "Flow_scale" ~ "Flow",
                               name == "Light_scale" ~ "Light",
-                              name == "Temp_scale" ~ "Temperature"))%>%
+                              name == "Temp_scale" ~ "Temperature",
+                              name == "Month"~ "Season"))%>%
   mutate(model = factor(model, levels = c("Gross Photosynthesis", "Respiration", "Calcification")),
-         Variable = factor(Variable, levels =  c("% cover of macroproducers","Light","Temperature","Flow")
+         Variable = factor(Variable, levels =  c("% cover of macroproducers","Light","Season","Flow","Temperature")
                             ))%>%
   ggplot(aes(x = model, y = value*100, fill = Variable))+
   geom_col()+
@@ -1210,7 +1210,7 @@ BothSites %>%
 BothSites %>%
   ggplot(aes(x = Year, y = daily_NEC))+
   geom_point(aes(color = Site))+
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm")+
   facet_wrap(~Month)
 
 
