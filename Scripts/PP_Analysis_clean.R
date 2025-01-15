@@ -936,8 +936,8 @@ mcmc_intervals(refm_mat, pars = colnames(prj_mat)) +
 
 prj_predict <- proj_predict(prj)
 
-prj_linpred <- proj_linpred(prj, newdata = dat_gauss_new, integrated = TRUE)
-cbind(dat_gauss_new, linpred = as.vector(prj_linpred$pred))
+#prj_linpred <- proj_linpred(prj, newdata = dat_gauss_new, integrated = TRUE)
+#cbind(dat_gauss_new, linpred = as.vector(prj_linpred$pred))
 
 # posterio predictive checks
 ppc_dens_overlay(y = LTER1_NA$daily_GPP, yrep = prj_predict)# the last 3 values are cut off for some reason
@@ -1252,3 +1252,128 @@ yearly_sst %>%
 min(yearly_sst$mean_SST)
 
 27.53-26.2
+
+## How many days in the timeseries?
+
+PP %>%
+  filter(Site == "LTER 1")%>%
+  reframe(sum(no_of_days, na.rm = TRUE))
+
+#203
+LTER1 %>%
+  ggplot(aes(x = Temp_mean_Night, y = night_NEC))+
+  geom_point(aes(color = Month))
+
+LTER1 %>%
+  ggplot(aes(x = Temp_mean_Day, y = daily_NEC))+
+  geom_point(aes(color = Month))
+  geom_smooth(method = "lm", formula = "y~poly(x,2)")
+
+LTER1 %>%
+  ggplot(aes(x = Temp_mean_Day, y = Temp_mean_Night))+
+  geom_point(aes(color = Month))
+
+# choose model
+mod = 'sharpschoolhigh_1981'
+
+# get start vals
+start_vals <- get_start_vals(LTER1$Temp_mean, LTER1$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+start_vals[4]<-0
+
+# get limits
+low_lims <- get_lower_lims(LTER1$Temp_mean, LTER1$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+upper_lims <- get_upper_lims(LTER1$Temp_mean, LTER1$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+
+fit <- nls_multstart(daily_NEC~sharpeschoolhigh_1981(temp = Temp_mean, r_tref,e,eh,th, tref = 25),
+                     data = LTER1,
+                     iter = 500,
+                     start_lower = start_vals - 10,
+                     start_upper = start_vals + 10,
+                     lower = low_lims,
+                     upper = upper_lims,
+                     supp_errors = 'Y')
+
+calc_params(fit) %>%
+  # round for easy viewing
+  mutate_all(round, 2)
+
+# predict new data
+new_data <- data.frame(Temp_mean = seq(min(LTER1$Temp_mean, na.rm = TRUE), max(LTER1$Temp_mean, na.rm = TRUE), 0.1))
+preds <- augment(fit, newdata = new_data)
+
+## add in %cover scaled data to look at change due just from physiology while controlling for the change in cover
+LTER1<-LTER1 %>%
+  #drop_na(daily_NEC)%>%
+  mutate(scaled_NEC = daily_NEC*(total_Calc/100),
+         scaled_NEC_night = night_NEC*(total_Calc/100),
+         scaled_NPP = daily_NPP*(mean_alive/100),
+         scaled_GPP = daily_GPP*(mean_alive/100),
+         scaled_R = -daily_R*(mean_alive/100),
+         scaled_totalNEC = scaled_NEC+scaled_NEC_night)
+
+
+LTER1_long<-LTER1 %>%
+  mutate(NEC_total = daily_NEC+night_NEC,
+         daily_R = -daily_R)%>%
+  select(Year, Month, daily_NPP, daily_R, daily_GPP, daily_NEC, night_NEC, NEC_total,TotalPAR_mean:scaled_totalNEC)%>%
+  pivot_longer(c(daily_NPP:NEC_total, scaled_NEC:scaled_totalNEC)) %>%
+  mutate(name = factor(name, c("daily_NPP", "scaled_NPP","daily_GPP", "scaled_GPP", 
+                               "daily_R","scaled_R", "daily_NEC", "scaled_NEC",
+                               "night_NEC", "scaled_NEC_night", "NEC_total", "scaled_totalNEC")))
+
+LTER1_long %>%
+  ggplot(aes(x = Year, y = value))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~name, scales = "free", ncol = 2)+
+  labs(y = "Rate normalized to percent cover of macro producers or calcifiers")+
+  theme_bw()
+
+
+LTER1_long%>%
+  ggplot(aes(x = TotalPAR_mean, y = value))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~name, scales = "free", ncol = 2)+
+  labs(x = "Total PAR",
+       y = "Rate normalized to percent cover of macro producers or calcifiers")+
+  theme_bw()
+
+LTER1_long%>%
+  ggplot(aes(x = Temp_mean, y = value))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~name, scales = "free", ncol = 2)+
+  labs(x = "Mean Temperature",
+       y = "Rate normalized to percent cover of macro producers or calcifiers")+
+  theme_bw()
+
+LTER1_long%>%
+  ggplot(aes(x = Flow_mean, y = value))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~name, scales = "free", ncol = 2)+
+  labs(x = "Mean Flow",
+       y = "Rate normalized to percent cover of macro producers or calcifiers")+
+  theme_bw()
+
+
+  
+ggplot(aes(x = Temp_mean, y = scaled_GPP/-scaled_R))+
+  geom_point(aes(color = Month))+
+  geom_smooth(method = "lm")
+  facet_wrap(~Month)
+
+# plot data and model fit
+ggplot(LTER1, aes(Temp_mean, daily_NEC)) +
+  geom_point() +
+  geom_line(aes(Temp_mean, .fitted), preds, col = 'blue') +
+  theme_bw(base_size = 12) +
+  labs(x = 'Temperature (ºC)',
+       y = 'Daytime NEC',
+       title = 'Respiration across temperatures')
+
+ggplot(LTER1, aes(Year, daily_NEC, color = Temp_mean))+
+  geom_point()+
+  geom_errorbar(aes(ymin = daily_NEC - daily_NEC_SE, ymax = daily_NEC+daily_NEC_SE))+
+  facet_wrap(~Month)

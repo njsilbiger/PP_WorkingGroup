@@ -50,7 +50,9 @@ PP_raw<-read_csv(here("Data","PP_raw_timeseries_updated.csv"))
 PP_raw <- PP_raw %>%
   mutate(time_local = mdy_hm(time_local),
          date = as.Date(time_local),
-         Year = year(date))
+         Year = year(date)) %>%
+  filter(!is.na(UP_Oxy) | !is.na(DN_Oxy)) %>% # drop the data where there was no oxygen because then there was no NPP data for those times
+  mutate(Day_Night = ifelse(PAR > 10,"Day", "Night")) # the way they coded the data to process made some of the night values NA when it should be 0
 
 ## Calculated integrated light by date and then take the average for each sampling period and site
 
@@ -62,10 +64,11 @@ IntLight<-PP_raw %>%
   mutate(TotalPAR = TotalPAR*60*60*12)%>%
   group_by(Site, Year, Deployment) %>% # get average by deployment
   summarise(TotalPAR_mean = mean(TotalPAR, na.rm = TRUE),
-            TotalPAR_SE = sd(TotalPAR, na.rm = TRUE)/n(),
+            TotalPAR_SE = sd(TotalPAR, na.rm = TRUE)/sqrt(n()),
             meandate = mean(date, na.rm = TRUE)) %>% # get mean date to be able to easily extract month
   mutate(Month = month(meandate),
          Month = case_when(Month==1~1,
+                           Month == 2~1,
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
@@ -104,19 +107,54 @@ Temp_deploy<-PP_raw %>%
   mutate(mean_Temp_site = (UP_Temp+DN_Temp)/2) %>% # average up and down
   group_by(Site, Year, Deployment, date)%>%
   summarise(Temperature_mean = mean(mean_Temp_site, na.rm = TRUE),
-            Temperature_max = max(mean_Temp_site, na.rm = TRUE)) %>%
+            #Temperature_max = max(mean_Temp_site, na.rm = TRUE)
+            ) %>%
   group_by(Site, Year, Deployment) %>% # get average by deployment
-  summarise(Temp_mean = mean(Temperature_mean, na.rm = TRUE),
-            Temp_SE = sd(Temperature_mean, na.rm = TRUE)/n(),
+  summarise(#Temp_max = mean(Temperature_max, na.rm = TRUE),
+            #Temp_max_SE = sd(Temperature_max, na.rm = TRUE)/sqrt(n),
+            Temp_mean = mean(Temperature_mean, na.rm = TRUE),
+            Temp_SE = sd(Temperature_mean, na.rm = TRUE)/sqrt(n()),
             meandate = mean(date, na.rm = TRUE)) %>% # get mean date to be able to easily extract month
   mutate(Month = month(meandate),
          Month = case_when(Month==1~1,
+                           Month == 2~1,
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
   select(Site, Year, Temp_mean, Temp_SE, Month) %>%
   droplevels()%>%
   mutate(monthname = ifelse(Month == 1, "January","June"))
+
+## calcualte day vs nighttime temperature
+Temp_deploy_daynight <- PP_raw %>%
+  mutate(mean_Temp_site = (UP_Temp+DN_Temp)/2) %>% # average up and down
+  group_by(Site, Year, Deployment, date, Day_Night)%>%
+  summarise(Temperature_mean = mean(mean_Temp_site, na.rm = TRUE),
+            #Temperature_max = max(mean_Temp_site, na.rm = TRUE)
+  ) %>%
+  drop_na(Day_Night) %>%
+  group_by(Site, Year, Deployment, Day_Night) %>% # get average by deployment
+  summarise(#Temp_max = mean(Temperature_max, na.rm = TRUE),
+    #Temp_max_SE = sd(Temperature_max, na.rm = TRUE)/sqrt(n),
+    Temp_mean = mean(Temperature_mean, na.rm = TRUE),
+    Temp_SE = sd(Temperature_mean, na.rm = TRUE)/sqrt(n()),
+    meandate = mean(date, na.rm = TRUE)) %>% # get mean date to be able to easily extract month
+  mutate(Month = month(meandate),
+         Month = case_when(Month==1~1,
+                           Month == 2~1,
+                           Month == 3 ~1, # one covid march sample
+                           Month == 6~6,
+                           Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
+  ungroup()%>%
+  select(Site, Year, Temp_mean, Temp_SE, Month, Day_Night) %>%
+  droplevels()%>%
+  mutate(monthname = ifelse(Month == 1, "January","June")) %>%
+  pivot_wider(names_from = Day_Night,
+              values_from = Temp_mean:Temp_SE)
+
+
+Temp_deploy<-Temp_deploy %>%
+  left_join(Temp_deploy_daynight)
 
 write_csv(Temp_deploy, here("Data","Temp_deployment.csv"))
 
@@ -154,6 +192,7 @@ RawSpeed<-PP_raw %>%
   mutate(Month = month(meandate)) %>%
   left_join(clouds)%>%
   mutate(Month = case_when(Month==1~1,
+                           Month == 2~1,
                            Month == 3 ~1, # one covid march sample
                            Month == 6~6,
                            Month ==5 ~6)) %>% # all the end of May are called "June" in other datasets
