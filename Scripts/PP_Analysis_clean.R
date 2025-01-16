@@ -24,6 +24,8 @@ library(projpred)
 library(ggsci)
 library(posterior)
 library(bayesplot)
+library(rTPC)
+library(nls.multstart)
 
 ## Read in the different data sheets ####
 
@@ -1301,14 +1303,83 @@ calc_params(fit) %>%
 new_data <- data.frame(Temp_mean = seq(min(LTER1$Temp_mean, na.rm = TRUE), max(LTER1$Temp_mean, na.rm = TRUE), 0.1))
 preds <- augment(fit, newdata = new_data)
 
+
+ggplot()+
+  geom_point(data = LTER1, aes(x = Temp_mean, y = daily_NEC, color = Month))+
+  geom_line(data = preds, aes(x = Temp_mean, y = .fitted))
+
+ggplot()+
+  geom_point(data = LTER1, aes(x = TotalPAR_mean, y = daily_NEC, color = Month))
+
+NEC_resid<-lm(daily_NEC~TotalPAR_mean, data = LTER1)
+
+LTER1_resid<-LTER1 %>%
+  left_join(augment(NEC_resid))%>%
+  mutate(resid_norm = .resid+200, # make the smallest value at 0
+         NEC_Light = daily_NEC/TotalPAR_mean) %>%
+  mutate(Season = ifelse(Month == "January", "Summer", "Winter"))
+
+LTER1_no_outliers<-LTER1 %>%
+  filter(daily_NEC>0,
+         daily_NEC<270)
+
+ggplot(LTER1_resid, aes(x = Temp_mean, y = daily_NEC, color = Month))+
+  geom_point()
+
+# run the TPC model while accounting for light
+# get start vals
+start_vals <- get_start_vals(LTER1_no_outliers$Temp_mean, LTER1_no_outliers$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+start_vals[2]<-0
+
+# get limits
+low_lims <- get_lower_lims(LTER1_no_outliers$Temp_mean, LTER1_no_outliers$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+upper_lims <- get_upper_lims(LTER1_no_outliers$Temp_mean, LTER1_no_outliers$daily_NEC, model_name = 'sharpeschoolhigh_1981')
+
+
+fit <- nls_multstart(daily_NEC~sharpeschoolhigh_1981(temp = Temp_mean, r_tref,e,eh,th, tref = 27),
+                     data = LTER1_no_outliers,
+                     iter = 500,
+                     start_lower = start_vals ,
+                     start_upper = start_vals + 10,
+                     lower = low_lims,
+                     upper = upper_lims,
+                     supp_errors = 'Y')
+
+
+Topt_data<-calc_params(fit) %>%
+  # round for easy viewing
+  mutate_all(round, 2)
+
+
+
+# predict new data
+new_data <- data.frame(Temp_mean = seq(min(LTER1_resid$Temp_mean, na.rm = TRUE)-0.5, max(LTER1_resid$Temp_mean, na.rm = TRUE)+1, 0.1))
+preds <- augment(fit, newdata = new_data) 
+
+ggplot()+
+  scale_x_continuous(limits = c(27.5,30.2))+
+  geom_vline(xintercept = Topt_data$topt, linetype = 2, alpha = 0.5)+
+  #scale_y_continuous(limits = c(0, 160))+
+  geom_line(data = preds, aes(x = Temp_mean, y = .fitted), inherit.aes = FALSE)+
+  geom_point(data = LTER1_resid, aes(x = Temp_mean, y =daily_NEC, fill = Season), shape = 21)+
+  scale_fill_manual(values = c("gray","black"))+
+  annotate("text", x = Topt_data$topt+0.4, y = 200, label = expression(paste("T"[opt],"= 29.31 ", degree, "C")))+
+  labs(x = "Temperature ("~degree~"C)",
+       y = bquote(atop("Net Ecosystem Calcification",
+                       "(mmol" ~ CaCO[3]~m^-2~d^-1~")")))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())
+
+ggsave(here("Output","NEC_TPC.pdf"), width = 6, height = 6)
+
 ## add in %cover scaled data to look at change due just from physiology while controlling for the change in cover
 LTER1<-LTER1 %>%
   #drop_na(daily_NEC)%>%
-  mutate(scaled_NEC = daily_NEC*(total_Calc/100),
-         scaled_NEC_night = night_NEC*(total_Calc/100),
-         scaled_NPP = daily_NPP*(mean_alive/100),
-         scaled_GPP = daily_GPP*(mean_alive/100),
-         scaled_R = -daily_R*(mean_alive/100),
+  mutate(scaled_NEC = daily_NEC*(100/total_Calc),
+         scaled_NEC_night = night_NEC*(100/total_Calc),
+         scaled_NPP = daily_NPP*(100/mean_alive),
+         scaled_GPP = daily_GPP*(100/mean_alive),
+         scaled_R = -daily_R*(100/mean_alive),
          scaled_totalNEC = scaled_NEC+scaled_NEC_night)
 
 
@@ -1377,3 +1448,42 @@ ggplot(LTER1, aes(Year, daily_NEC, color = Temp_mean))+
   geom_point()+
   geom_errorbar(aes(ymin = daily_NEC - daily_NEC_SE, ymax = daily_NEC+daily_NEC_SE))+
   facet_wrap(~Month)
+
+LTER1 %>%
+  ggplot(aes(x = mean_alive, y = daily_GPP))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  geom_text(aes(label = Year))
+  facet_wrap(~Month)
+  
+  GPP_resid<-lmer(daily_GPP~mean_alive+(1|Month), data = LTER1)
+  GPP_resid<-lm(daily_GPP~mean_alive, data = LTER1)
+  
+  Light_resid<-lm(TotalPAR_mean~mean_alive, data = LTER1)
+
+  LTER1 %>%
+      left_join(augment(GPP_resid)) %>%
+    ggplot(aes(x = Flow_mean, y = .resid))+
+    geom_point()+
+    geom_smooth(method = "lm")
+  
+  LTER1 %>%
+    left_join(augment(Light_resid)) %>%
+    ggplot(aes(y = daily_GPP, x = .resid))+
+    geom_point(aes(colour = Month))+
+    geom_smooth(method = "lm")
+  
+    LTER1 %>%
+      ggplot(aes(x = mean_SST, y = mean_alive, color = Month))+
+      geom_point()
+    
+    LTER1 %>% 
+      select(Year, mean_alive) %>%
+      left_join(yearly_sst) %>%
+      ggplot(aes(x = mean_SST, y = mean_alive))+
+      geom_point()+
+      geom_smooth(method = "lm")
+    
+    LTER1 %>%
+      ggplot(aes(x = mean_alive, y = TotalPAR_mean))+
+      geom_point(aes(color = Month))
