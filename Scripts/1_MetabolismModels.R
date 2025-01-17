@@ -344,8 +344,8 @@ LTER1 <-LTER1 %>% # add in scaled data
          Flow_scale = as.numeric(scale(Flow_mean, scale = TRUE, center = TRUE)),
          alive_scale = as.numeric(scale(mean_alive, scale = TRUE, center = TRUE)),
          calc_scale = as.numeric(scale(total_Calc, scale = TRUE, center = TRUE))
-         
-  )
+         )
+
 
 # split the seasons
 WinterData<-LTER1 %>%
@@ -379,9 +379,11 @@ CalcMod_Coefs <- summary(CalcMod)$fixed %>%
 
 
 # Temperature
+# TempMod<-brm(Temp_scale ~ Year*Season, data = LTER1,
+#            control = list(adapt_delta = 0.92, max_treedepth = 14), iter = 3000)
 
 TempMod_winter<-brm(Temp_scale~Year , data = WinterData, 
-                    control = list(adapt_delta = 0.92), iter = 3000)
+                    control = list(adapt_delta = 0.92, max_treedepth = 12), iter = 3000)
 
 #extract the parameters
 Temp_winter_Coefs <- summary(TempMod_winter)$fixed %>%
@@ -401,8 +403,8 @@ Temp_summer_Coefs <- summary(TempMod_summer)$fixed %>%
   as_tibble()
 
 ## Light
-LightMod_winter<-brm(Light_scale~Year , data = WinterData, 
-                     control = list(adapt_delta = 0.92), iter = 3000)
+LightMod_winter<-brm(Light_scale~Year, data = WinterData, 
+                     control = list(adapt_delta = 0.92, max_treedepth = 14), iter = 3000)
 
 #extract the parameters
 Light_winter_Coefs <- summary(LightMod_winter)$fixed %>%
@@ -419,6 +421,7 @@ Light_summer_Coefs <- summary(LightMod_summer)$fixed %>%
          Parameter = "Light",
          coef = rownames(.)) %>%
   as_tibble()
+
 # Flow
 FlowMod_winter<-brm(Flow_scale~Year , data = WinterData, 
                     control = list(adapt_delta = 0.94), iter = 5000)
@@ -482,8 +485,9 @@ Temp_pred<-ggplot()+
   geom_line(data = data_Temp, aes(x = effect1__, y = estimate__), size = 1.2)+
   geom_ribbon(data = data_Temp, aes(x = effect1__, ymin = lower__, ymax = upper__),
               fill = "#A1AEB1", alpha = 0.3)+
-  geom_point(data = LTER1 %>% filter(Month == "June"), 
-             aes(x = Year, y = Temp_mean), size = 2, color = "#0ea7b5")+
+  geom_point(data = LTER1,  
+             aes(x = Year, y = Temp_mean, color = Season), size = 2)+
+  scale_color_manual(values = c("#ffbe4f","#0ea7b5"))+
   labs(x = "Year",
        y =bquote(atop("Temperature",
                       "("~degree~"C)")))+
@@ -570,12 +574,68 @@ ggsave(here("Output","WinterEnviro_pred.pdf"), width = 5, height = 12)
 ## macro producers + Temp + Light + Flow (scaled) + (1|month)
 
 ## All scaled in the models
+
+# NP - model selection because the variables are too correlated
+
+NP_enviro_mod<-brm(daily_NPP~alive_scale+Light_scale+Flow_scale , data = LTER1, 
+                    control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+summary(NP_enviro_mod)
+NP_enviro_mod_cover<-brm(daily_NPP~alive_scale, data = LTER1, 
+                   control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+NP_enviro_mod_light<-brm(daily_NPP~Light_scale , data = LTER1, 
+                   control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+NP_enviro_mod_temp<-brm(daily_NPP~Temp_scale , data = LTER1, 
+                   control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+NP_enviro_mod_flow<-brm(daily_NPP~Flow_scale , data = LTER1, 
+                   control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+loo_compare(loo(NP_enviro_mod_cover), loo(NP_enviro_mod_light),
+            loo(NP_enviro_mod_temp), loo(NP_enviro_mod_flow))
+
+
 # GPP
 LTER1_NA<-LTER1 %>%
   drop_na(daily_GPP)
 
-GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale +(1|Month) , data = LTER1, 
-                    control = list(adapt_delta = 0.92), iter = 5000)
+
+# When I set this prior the only significant effect is Cover
+#priors<-prior(lognormal(0, 10), class = "b", lb = 0)
+
+GPP_enviro_mod<-brm(daily_GPP~alive_scale+Temp_scale+Light_scale+Flow_scale , data = LTER1, 
+                    control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+## Model selection way--------------
+#cover
+GPP_enviro_cover<-brm(daily_GPP~alive_scale+(1|Month) , data = LTER1, save_pars = save_pars(all = TRUE),
+                    control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+summary(GPP_enviro_cover)
+
+#Temp
+GPP_enviro_temp<-brm(daily_GPP~Temp_scale+(1|Month) , data = LTER1, 
+                      control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+summary(GPP_enviro_temp)
+
+#Light
+GPP_enviro_light<-brm(daily_GPP~Light_scale+(1|Month) , data = LTER1, 
+                     control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+summary(GPP_enviro_light)
+
+#Flow
+GPP_enviro_Flow<-brm(daily_GPP~Flow_scale+(1|Month) , data = LTER1, 
+                      control = list(adapt_delta = 0.92), iter = 5000, cores = 2)
+
+summary(GPP_enviro_Flow)
+
+## LOO model selection
+loo_compare(loo(GPP_enviro_cover,moment_match = TRUE), loo(GPP_enviro_temp), 
+            loo(GPP_enviro_light), loo(GPP_enviro_Flow))
 
 
 #plot(conditional_effects(GPP_enviro_mod, re_formula =NULL), points = TRUE)
