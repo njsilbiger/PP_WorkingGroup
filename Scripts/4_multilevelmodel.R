@@ -181,7 +181,7 @@ LTER1_Pg<-LTER1_Pg %>%
 # In situ measurements of flow effects on primary production and
 #dark respiration in reef corals LO 1991
 
-# Flow power function P = aX^b
+# Flow power function P = aX^b--- add a prior to the Pmax- flow model so the intercept is ~ 3000
 fit1<-brm(
   bf(dailyGPP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
      nl = TRUE, alpha~1,
