@@ -184,8 +184,8 @@ LTER1_Pg<-LTER1_Pg %>%
 # Flow power function P = aX^b--- add a prior to the Pmax- flow model so the intercept is ~ 3000
 fit1<-brm(
   bf(dailyGPP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
-     nl = TRUE, alpha~1,
-     Pmax~Flowcenter,
+     nl = TRUE, alpha~1,aflowcenter~1,bflowpmax~1,
+     nlf(Pmax~aflowcenter*Flowcenter +bflowpmax),
      Rd~Tempcenter*resid)+ student(), # Rd changes by both temp and cover interactively
   data = LTER1_Pg,
   set_rescor(FALSE),
@@ -194,7 +194,8 @@ fit1<-brm(
     #prior(normal(1,10), nlpar = "aFlow", lb = 0),
     #prior(uniform(0,1), nlpar = "bFlow", lb = 0),
     #prior(normal(0,10), nlpar = "Flowcenter"),
-    prior(normal(3000,100), nlpar = "Pmax", lb = 0),
+    prior(normal(3000,100), nlpar = "bflowpmax", lb = 0),
+    #prior(normal(3000,100), nlpar = "Pmax", lb = 0),
     prior(normal(1000, 500), nlpar = "Rd", lb = 0)
   ), control = list(adapt_delta = 0.99, max_treedepth = 20), 
 #  init = my_inits,
