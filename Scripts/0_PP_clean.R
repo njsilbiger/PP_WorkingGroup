@@ -29,7 +29,9 @@ All_PP_data<-All_PP_data %>%
          DN_Oxy = ifelse(DateTime< ymd_hms("2014-03-01 00:00:00"), (DN_Oxy/32)*1000, DN_Oxy),
          PP = ifelse(DateTime< ymd_hms("2014-03-01 00:00:00"), (PP/32)*1000, PP))%>%
   mutate(Date = as_date(DateTime),
-         Year = year(DateTime))
+         Year = year(DateTime)) %>%
+  filter(!Date %in% mdy("5/27/2011","5/28/2011")) %>% # the respiration rate is in correct these days from instrument failure
+  filter(Season != "Summer" | Year != "2007")
 
 # calculate hourly GP and R data 
 Daily_R <-All_PP_data %>%
@@ -41,7 +43,9 @@ Daily_R <-All_PP_data %>%
 All_PP_data<-All_PP_data %>%
   left_join(Daily_R) %>%
   mutate(GP = PP - R_average) %>%
-  mutate(GP = ifelse(PAR == 0, NA, GP)) # remove GP from any of the night data
+  mutate(GP = ifelse(PAR == 0, NA, GP),# remove GP from any of the night data 
+         Temperature_mean = (UP_Temp+ DN_Temp)/2,
+         Flow_mean = (UP_Velocity_mps+DN_Velocity_mps)/2) 
 
 Seasonal_Averages <-All_PP_data %>%
   mutate(NP = ifelse(PAR == 0, NA, PP),# remove nighttime respiration for average NP
@@ -64,3 +68,41 @@ Seasonal_Averages %>%
 Seasonal_Averages %>%
   ggplot(aes(x = Year, y = NP_mean,color = Season ))+
   geom_point()
+
+All_PP_data %>%
+  ggplot(aes(x = PAR, y = PP))+
+  geom_point()
+
+All_PP_data %>%
+  filter(PAR>0) %>% # Only grab data with light
+  mutate(PAR = PAR/1000000) %>% # conver to mols 3600*12/1000000
+  group_by(Year, Season, Date)%>%
+  summarise(TotalPAR = mean(PAR, na.rm = TRUE))%>% # get the daily total PAR
+  mutate(TotalPAR = TotalPAR*60*60*12)%>%
+  group_by(Year, Season) %>% # get average by deployment
+  summarise(TotalPAR_mean = mean(TotalPAR, na.rm = TRUE),
+            TotalPAR_SE = sd(TotalPAR, na.rm = TRUE)/sqrt(n()))%>%
+  ggplot(aes(x = Year, y = TotalPAR_mean, color = Season))+
+  geom_point()
+
+All_PP_data %>%
+  filter(PAR == 0)%>%
+  ggplot(aes(x = Flow_mean, y = PP, color = Year))+
+  geom_point()+
+  geom_smooth(method = "lm", formula = "y~exp(x)")
+  facet_wrap(Year~Season)
+  
+  All_PP_data %>%
+    filter(PAR>0)%>%
+    ggplot(aes(x = mean_solar_rad_kwpm2, y = PAR))+
+    geom_point()
+  
+  All_PP_data %>%
+    filter(PAR>0)%>%
+    group_by(Year, Season)%>%
+    summarise(mean_solar = mean(mean_solar_rad_kwpm2, na.rm = TRUE),
+              mean_PAR = mean(PAR, na.rm = TRUE))%>%
+    ggplot(aes(y = mean_PAR, x = Year))+
+    geom_point()+
+    geom_smooth(method = "lm")
+   
