@@ -1,0 +1,57 @@
+NUM_POSTE: 8-digit Météo-France number of the post
+USUAL_NAME: usual name of the position
+LAT: latitude, negative south (in degrees and millionths of a degree)
+LON: longitude, negative west of GREENWICH (in degrees and millionths of a degree)
+ALTI: altitude of the foot of the shelter or of the rain gauge if there is no shelter (in m)
+YYYYMMDD: date of measurement (year month day)
+DHUMEC: humidification duration (in mins)
+PMERM: daily average of hourly sea pressures (in hPa and 1/10)
+PMERMIN: daily minimum of hourly minimum sea pressures (in hPa and 1/10)
+INST: daily sunshine duration (in min)
+GLOT: daily global radiation (in J/cm2)
+DIFT: daily diffuse radiation (in J/cm2)
+DIRT: daily direct radiation (in J/cm2)
+INFRART: sum of hourly infrared radiation (in J/cm2)
+UV: daily cumulative ultraviolet radiation (in J/cm2)
+UV_INDICEX: maximum hourly UV indices
+SIGMA: fraction of sunshine relative to the length of the day (in %)
+UN: daily minimum of hourly minimum relative humidities (in %)
+HUN: One hour (hhmm)
+UX: daily maximum of hourly maximum relative humidities (in %)
+HUX: UX time (hhmm)
+UM: daily average of hourly relative humidities (in %)
+DHUMI40: humidity duration with U â‰¤ 40% (in min)
+DHUMI80: humidity duration U â‰¥ 80% (in min)
+TSVM: mean vapor pressure (in hPa and 1/10)
+ETPMON: Daily ETP Monteith (in mm and 1/10)
+ETPGRID: ETP calculated at the nearest grid point (in mm and 1/10)
+FLOWM: unused field
+HNEIGEF: height of fresh snow fallen in 24 hours (from 06:00 FU on day D to 06:00 FU on day D+1) which remains on the ground at 06:00 FU. The value recorded on day D+1 is assigned to day D (in cm)
+NEIGETOTX: maximum daily snow depth (between 01h and 24h FU) (in cm)
+NEIGETOT06: total thickness of snow on the ground measured at 6 a.m. (NEIGETOT 6 a.m.) (in cm)
+SNOW: occurrence of snow (0 if it did not snow, 1 if it snowed)
+BROU: occurrence of fog (0 or 1 if pheno.)
+ORAG: occurrence of storm (0 or 1 if pheno.)
+ICE PELLET: occurrence of sleet (0 or 1 if pheno.)
+HAIL: occurrence of hail (0 or 1 if pheno.)
+DEW: occurrence of dew (0 or 1 if pheno.)
+ICE: occurrence of ice (0 or 1 if pheno.)
+SOLNEIGE: occurrence of ground covered with snow (0 or 1 if pheno.)
+FROST: occurrence of white frost (0 or 1 if pheno.)
+SMOKE: occurrence of smoke (0 or 1 if pheno.)
+MIST: occurrence of mist (0 or 1 if pheno.)
+LIGHTNING: occurrence of lightning (0 or 1 if pheno)
+NB300: maximum cloudiness > 4/8 and layer < 300 m (in octa)
+BA300: minimum height of NB300 (in m)
+TMERMIN: daily minimum seawater temperature (in °C and 1/10)
+TMERMAX: maximum daily seawater temperature (in °C and 1/10)
+
+Each data item is associated with a quality code (e.g. T;QT):
+ 9: filtered (data has passed first level filters/checks)
+ 0: protected data (the data has been definitively validated by the climatologist)
+ 1: validated (the data has been validated by automatic control or by the climatologist)
+ 2: doubtful under verification (the data has been called into question by automatic control)
+ 
+Generally speaking, the values ​​provided are given with a precision that roughly corresponds to the resolution of the value measuring device.
+However, it may happen, for technical reasons of storage or extraction of values, that this rule is not respected.
+Due to rounding, it may occasionally happen that base values ​​at a lower time step (e.g. minute data) are not exactly consistent with their correspondents at a higher time step (e.g. hourly data).

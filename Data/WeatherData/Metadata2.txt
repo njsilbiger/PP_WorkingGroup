@@ -1,0 +1,42 @@
+NUM_POSTE: 8-digit Météo-France number of the post
+USUAL_NAME: usual name of the position
+LAT: latitude, negative south (in degrees and millionths of a degree)
+LON: longitude, negative west of GREENWICH (in degrees and millionths of a degree)
+ALTI: altitude of the foot of the shelter or of the rain gauge if there is no shelter (in m)
+YYYYMMDD: date of measurement (year month day)
+RR: amount of precipitation that fell in 24 hours (from 06:00 FU on day D to 06:00 FU on day D+1). The value recorded on day D+1 is assigned to day D (in mm and 1/10)
+TN: minimum temperature under shelter (in Â°C and 1/10)
+HTN: TN time (hhmm)
+TX: maximum temperature under shelter (in Â°C and 1/10)
+HTX: TX time (hhmm)
+TM: daily average of hourly temperatures under shelter (in Â°C and 1/10)
+TNTXM: daily average (TN+TX)/2 (in Â°C and 1/10)
+TAMPLI: daily thermal amplitude: difference between daily TX and TN (TX-TN) (in Â°C and 1/10)
+TNSOL: minimum daily temperature at 10 cm above ground (in Â°C and 1/10)
+TN50: minimum daily temperature at 50 cm above ground (in Â°C and 1/10)
+DG: duration of frost under shelter (T â‰¤ 0Â°C) (in min)
+FFM: daily average wind force averaged over 10 min, at 10 m (in m/s and 1/10)
+FF2M: daily average wind force averaged over 10 min, at 2 m (in m/s and 1/10)
+FXY: daily maximum of the maximum hourly wind force averaged over 10 min, at 10 m (in m/s and 1/10)
+DXY: direction of FXY (in pink of 360)
+HXY: FXY time (hhmm)
+FXI: daily maximum of the instantaneous hourly maximum wind force, at 10 m (in m/s and 1/10)
+DXI: direction of FXI (in pink 360)
+HXI: FXI time (hhmm)
+FXI2: daily maximum of the instantaneous hourly maximum wind force, at 2 m (in m/s and 1/10)
+DXI2: direction of FXI2 (in pink of 360)
+HXI2: FXI2 time (hhmm)
+FXI3S: daily maximum of the maximum hourly wind force averaged over 3 s, at 10 m (in m/s and 1/10)
+DXI3S: direction of FXI3S (in pink of 360)
+HXI3S: FXI3S time (hhmm)
+DRR: duration of precipitation (in min)
+
+Each data item is associated with a quality code (e.g. T;QT):
+ 9: filtered data (data has passed first level filters/checks)
+ 0: protected data (the data has been definitively validated by the climatologist)
+ 1: validated data (the data has been validated by automatic control or by the climatologist)
+ 2: questionable data being verified (the data has been called into question by automatic control)
+ 
+Generally speaking, the values ​​provided are given with a precision that roughly corresponds to the resolution of the value measuring device.
+However, it may happen, for technical reasons of storage or extraction of values, that this rule is not respected.
+Due to rounding, it may occasionally happen that base values ​​at a lower time step (e.g. minute data) are not exactly consistent with their correspondents at a higher time step (e.g. hourly data).
