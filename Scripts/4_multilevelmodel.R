@@ -98,19 +98,19 @@ summary(fit1)
 
 #plot(me_cover, ncol = 5, points = TRUE)
 
-h <- data.frame(PAR=rep(seq(0,50, length.out = 50),5), 
+h <- data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
                 Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
                 Tempcenter = rep(-1,250),
                 Flowcenter = rep(0,250)) %>%
-  bind_rows(data.frame(PAR=rep(seq(0,50, length.out = 50),5), 
+  bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
                        Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
                        Tempcenter = rep(0,250),
                        Flowcenter = rep(0,250)))%>%
-  bind_rows(data.frame(PAR=rep(seq(0,50, length.out = 50),5), 
+  bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
                        Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
                        Tempcenter = rep(1,250),
                        Flowcenter = rep(0,250)))%>%
-  bind_rows(data.frame(PAR=rep(seq(0,50, length.out = 50),5), 
+  bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
                        Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
                        Tempcenter = rep(1,250),
                        Flowcenter = rep(2,250)))
@@ -121,13 +121,12 @@ pred<-predict(fit1, newdata = h, summary = TRUE, allow_new_levels = TRUE) %>%
          Tempcenter = as.factor(Tempcenter))
 
 ggplot(pred, aes(x= PAR, y  =Estimate))+
-  geom_line(aes(color = Tempcenter, lty = Covercenter))+
-  scale_color_manual(values = c("blue","pink","red"))+
-  
-  geom_point(data = LTER1_Pnet, aes(x = PAR, 
-                                    y = dailyNPP, 
+   scale_color_manual(values = c("blue","pink","red"))+
+   geom_point(data = LTER1_Pnet, aes(x = PAR, 
+                                    y = PP, 
                                     size = mean_alive,
-                                    fill = Temp_mean), shape = 21)+
+                                    fill = Temperature_mean), shape = 21)+
+  geom_line(aes(color = Tempcenter, lty = Covercenter))+
   labs(y = "NEP")
 
 

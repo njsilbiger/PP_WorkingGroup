@@ -6,7 +6,8 @@
 ##### load libraries #############
 library(tidyverse)
 library(here)
-
+library(brms)
+library(tidybayes)
 
 ### Read in the data ######
 
@@ -47,29 +48,143 @@ All_PP_data<-All_PP_data %>%
          Temperature_mean = (UP_Temp+ DN_Temp)/2,
          Flow_mean = (UP_Velocity_mps+DN_Velocity_mps)/2) 
 
+
+# Bob's transect percent cover data
+BenthicCover_Algae<-read_csv(here("Data","Backreef_Algae.csv")) %>%
+  filter(Habitat == "Backreef")
+
+Benthic_summary_Algae<-BenthicCover_Algae %>%
+  rename(name = Taxonomy_Substrate_Functional_Group)%>%
+  mutate(name = ifelse(name %in%c("Amansia rhodantha",         
+                                  "Turbinaria ornata" ,        
+                                  "Dictyota sp.",              
+                                  "Halimeda sp.",              
+                                  "Galaxaura sp.",             
+                                  "Liagora ceranoides",        
+                                  "Cyanophyta",                
+                                  "Halimeda minima",           
+                                  "Amphiroa fragilissima",     
+                                  "Caulerpa serrulata",        
+                                  "Corallimorpharia",          
+                                  "Dictyota friabilis",        
+                                  "Galaxaura rugosa",          
+                                  "Cladophoropsis membranacea",
+                                  "Galaxaura filamentosa",     
+                                  "Halimeda discoidea",        
+                                  "Peyssonnelia inamoena",     
+                                  "Caulerpa racemosa",         
+                                  "Valonia ventricosa",        
+                                  "Actinotrichia fragilis",    
+                                  "Dictyota bartayresiana",    
+                                  "Microdictyon umbilicatum",  
+                                  "Halimeda distorta",         
+                                  "Halimeda incrassata",       
+                                  "Halimeda macroloba",        
+                                  "Dictyota implexa",          
+                                  "Gelidiella acerosa",        
+                                  "Dictyosphaeria cavernosa",  
+                                  "Valonia aegagropila",       
+                                  "Microdictyon okamurae",     
+                                  "Halimeda opuntia",          
+                                  "Dichotomaria obtusata",     
+                                  "Chlorodesmis fastigiata",   
+                                  "Phyllodictyon anastomosans",
+                                  "Phormidium sp.",            
+                                  "Cladophoropsis luxurians",  
+                                  "Sargassum pacificum",       
+                                  "Chnoospora implexa",        
+                                  "Halimeda taenicola",        
+                                  "Boodlea kaeneana",          
+                                  "Padina boryana",            
+                                  "Coelothrix irregularis",    
+                                  "Gelidiella sp.",            
+                                  "Hydroclathrus clathratus",  
+                                  "Dictyota divaricata",       
+                                  "Hypnea spinella",           
+                                  "Dichotomaria marginata",    
+                                  "Sporolithon sp.",           
+                                  "Chaetomorpha antennina",    
+                                  "Asparagopsis taxiformis"
+  ), "Fleshy Macroalgae",name))%>%
+  group_by(Year, Site, name)%>%
+  summarise(mean_cover = mean(Percent_Cover, na.rm = TRUE))
+
+## Calculate the total percent of calcifiers
+Total_Calc<-Benthic_summary_Algae %>%
+  filter(name %in% c("Coral","Crustose Corallines"))%>%
+  group_by(Year, Site)%>%
+  reframe(total_Calc = mean_cover[name == "Coral"]+
+            mean_cover[name == "Crustose Corallines"])
+
+TotalLiving<-Benthic_summary_Algae %>%
+  filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
+  group_by(Year, Site)%>%
+  summarise(mean_alive = sum(mean_cover))
+
+
 Seasonal_Averages <-All_PP_data %>%
   mutate(NP = ifelse(PAR == 0, NA, PP),# remove nighttime respiration for average NP
          R = ifelse(PAR == 0, PP, NA) # only include night data for R
          ) %>% 
   group_by(Year, Season) %>%
   summarise(NP_mean = mean(NP, na.rm = TRUE),
+            NP_SE = sd(NP, na.rm = TRUE)/sqrt(n()),
             GP_mean = mean(GP, na.rm = TRUE),
-            R_mean = mean(R, na.rm = TRUE))
+            GP_SE = sd(GP, na.rm = TRUE)/sqrt(n()),
+            R_mean = mean(R, na.rm = TRUE),
+            R_SE = sd(R, na.rm = TRUE)/sqrt(n()),
+            Temperature_mean = mean(Temperature_mean, na.rm = TRUE),
+            Flow_mean = mean(Flow_mean, na.rm = TRUE),
+            PAR_mean = mean(PAR, na.rm = TRUE)
+          ) %>%
+  left_join(TotalLiving %>%
+              filter(Site == "LTER 1"))
   
   
 Seasonal_Averages %>%
-  ggplot(aes(x = Year, y = GP_mean,color = Season ))+
-  geom_point()
+  ggplot(aes(x = Year, y = GP_mean ))+
+  geom_point()+
+  geom_errorbar(aes(ymin = GP_mean - GP_SE, ymax = GP_mean+GP_SE))+
+  geom_smooth(method = "lm")
 
 Seasonal_Averages %>%
-  ggplot(aes(x = Year, y = R_mean,color = Season ))+
-  geom_point()
+  ggplot(aes(x = Year, y = R_mean ))+
+  geom_errorbar(aes(ymin = R_mean - R_SE, ymax = R_mean+R_SE))+
+  geom_point()+
+  geom_smooth(method = "lm")
 
 Seasonal_Averages %>%
+  #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
   ggplot(aes(x = Year, y = NP_mean,color = Season ))+
-  geom_point()
+  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+  geom_point()+
+  facet_wrap(~Season)
+  
+  NP_model<-brm(
+    bf(NP_mean~Year*Season, nu = 3), data = Seasonal_Averages, 
+                family = "student", control = list(max_treedepth = 14))
 
-All_PP_data %>%
+
+  Seasonal_Averages %>%
+    filter(!Year %in% c("2021", "2007"))%>%
+    #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+    ggplot(aes(x = Year, y = NP_mean,color = Flow_mean ))+
+    geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+    geom_point()+
+    geom_smooth(method = "lm")+
+    facet_wrap(~Season, scales = "free")
+  
+  
+  Seasonal_Averages %>%
+    filter(!Year %in% c("2021", "2007"))%>%
+    #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+    ggplot(aes(x = Year, y = PAR_mean))+
+    #geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+    geom_point()+
+    geom_smooth(method = "lm")+
+    facet_wrap(~Season, scales = "free")
+  
+  All_PP_data %>%
   ggplot(aes(x = PAR, y = PP))+
   geom_point()
 
@@ -86,11 +201,11 @@ All_PP_data %>%
   geom_point()
 
 All_PP_data %>%
-  filter(PAR == 0)%>%
-  ggplot(aes(x = Flow_mean, y = PP, color = Year))+
+  filter(PAR > 0)%>%
+  ggplot(aes(x = PAR, y = PP, group = Date, color = Date))+
   geom_point()+
-  geom_smooth(method = "lm", formula = "y~exp(x)")
-  facet_wrap(Year~Season)
+ # geom_smooth(method = "lm")+
+  facet_wrap(~Date)
   
   All_PP_data %>%
     filter(PAR>0)%>%
@@ -106,3 +221,199 @@ All_PP_data %>%
     geom_point()+
     geom_smooth(method = "lm")
    
+
+  All_PP_data %>%
+    filter(Year == 2021)%>%
+    ggplot(aes(x = DateTime, y = PP))+
+    geom_point(aes(color = PAR), size = 2)+
+ #   scale_color_continuous(trans = "log")+
+    geom_line()+
+    geom_hline(yintercept = 0)+
+    facet_wrap(Year~Season, scales = "free_x")+
+    theme_bw()
+    #geom_smooth()
+  
+  
+  All_PP_data %>%
+    filter(Year == 2021)%>%
+    ggplot(aes(x = PAR, y = PP, group = Date))+
+    geom_point(aes(color = PAR), size = 2)+
+    #   scale_color_continuous(trans = "log")+
+    geom_smooth()+
+    geom_hline(yintercept = 0)+
+    facet_wrap(~Date)
+  
+  
+  All_PP_data<-All_PP_data %>%
+    left_join(TotalLiving %>%
+                filter(Site == "LTER 1"))
+
+  LTER1_Pnet <-All_PP_data %>%
+    mutate(tempc = Temperature_mean,
+           Flowmean = Flow_mean,
+          # daily_R = -daily_R
+           )%>%
+    mutate(PARcenter = as.numeric(scale(PAR, center = TRUE, scale = FALSE)),
+           Covercenter = as.numeric(scale(mean_alive, center = TRUE, scale = FALSE)),
+           Tempcenter = as.numeric(scale(Temperature_mean, center = TRUE, scale = FALSE)),
+           Flowcenter = as.numeric(scale(Flow_mean, center = TRUE, scale = FALSE)))
+  
+  
+  fit1<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+        nl = TRUE, alpha~1,Pmax~Tempcenter +Flowmean + Covercenter,
+       Rd~Tempcenter+Covercenter+ Flowcenter)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+   # prior = c(
+   #   prior(normal(1,100), nlpar = "alpha", lb = 0), 
+   #   prior(normal(400,100), nlpar = "Pmax", lb = 0),
+    #  prior(normal(1000, 500), nlpar = "Rd", lb = 0)
+   # ), 
+  control = list(adapt_delta = 0.99, max_treedepth = 20), 
+  #  init = my_inits,
+    cores = 4, 
+    chains = 3, seed = 11, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+  
+  # nlf(Pmax ~ a*Flowmean^b)
+  
+  fit1<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+        nl = TRUE, alpha~1,
+        Pmax ~ Flowmean + Tempcenter,
+       Rd~Covercenter+Tempcenter+Flowmean)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+     prior = c(
+       prior(normal(1,100), nlpar = "alpha", lb = 0) 
+     #  prior(normal(100,100), nlpar = "Pmax", lb = 0)
+    #  prior(normal(1000, 500), nlpar = "Rd", lb = 0)
+     ), 
+    control = list(adapt_delta = 0.99, max_treedepth = 20), 
+    #  init = my_inits,
+    cores = 4, 
+    chains = 3, seed = 11, iter = 8000, warmup = 2000
+    #silent = TRUE
+  )
+  
+  pp_check(fit1, resp = "PP", ndraws = 20)+
+    scale_x_continuous(limits = c(-200,200))
+ # pp_check(fit1, resp = "Pmax", ndraws = 20)
+#  pp_check(fit1, resp = "Rd", ndraws = 20)
+  
+  conditional_effects(fit1)
+  
+  h <- data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
+                  Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
+                  Tempcenter = rep(-1,250),
+                  Flowmean = rep(0.1,250)) %>%
+    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
+                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
+                         Tempcenter = rep(0,250),
+                         Flowmean = rep(0.2,250)))%>%
+    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
+                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
+                         Tempcenter = rep(1,250),
+                         Flowmean = rep(0.3,250)))%>%
+    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
+                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
+                         Tempcenter = rep(1,250),
+                         Flowmean = rep(0.4,250)))
+  
+  pred<-predict(fit1, newdata = h, summary = TRUE, allow_new_levels = TRUE) %>%
+    bind_cols(h) %>%
+    mutate(Covercenter = as.factor(Covercenter),
+           Tempcenter = as.factor(Tempcenter),
+           Flowmean = as.factor(Flowmean))
+  
+  ggplot(pred, aes(x= PAR, y  =Estimate))+
+    scale_color_manual(values = c("blue","pink","red"))+
+    geom_point(data = LTER1_Pnet, aes(x = PAR, 
+                                      y = PP, 
+                                      size = mean_alive,
+                                     # fill = Flow_mean
+                                      ), shape = 21, alpha = 0.1)+
+    geom_line(aes(color = Tempcenter, lty = Covercenter, linewidth = Flowmean))+
+    scale_linewidth_discrete(range = c(0.1,1))+
+   # scale_alpha(range =c(0.5,1))+
+    labs(y = "NEP")
+  
+  
+  # 10% change in PP at ~ average PAR and in the dark
+  Predict_10 <-tibble(PAR = c(730,0,730,0,730,0,730,0,730,0,730,0), 
+                         Tempcenter = c(0,0,0,0,0,0,1.1,1.1,0,0,0,0), 
+                         Flowmean = c(rep(mean(LTER1_Pnet$Flowmean, na.rm = TRUE),8),
+                                      c(mean(LTER1_Pnet$Flowmean, na.rm = TRUE),mean(LTER1_Pnet$Flowmean, na.rm = TRUE),
+                                        mean(LTER1_Pnet$Flowmean, na.rm = TRUE)*1.1, mean(LTER1_Pnet$Flowmean, na.rm = TRUE)*1.1)),
+                         Covercenter = c(0,0,10,10,0,0,0,0,0,0,0,0),
+                       model = c("Cover","Cover","Cover","Cover", "Temp","Temp","Temp","Temp", "Flow","Flow","Flow","Flow"),
+                      change = c("Average","Average","Change","Change","Average","Average","Change","Change","Average","Average","Change","Change"))
+  
+ Percent_10<- fitted(fit1, newdata = Predict_10 , summary = TRUE, allow_new_levels = TRUE)%>%
+    bind_cols(Predict_10) %>%
+    mutate(P_R = ifelse(PAR == 0, "Respiration", "Net Production")) %>%
+    group_by(P_R, model)%>%
+    reframe(Percent_change = 100*(Estimate[change == "Average"]- Estimate[change == "Change"])/Estimate[change == "Average"])
+    
+  
+ Percent_10 %>%
+ ggplot(aes(x = model, y = Percent_change))+
+   geom_col()+
+   labs(y = "Percent Change in PP",
+        x = "10% increase in each parameter")+
+   facet_wrap(~P_R)+
+   theme_bw()
+  ggsave(here("Output","PercentChange.png"))  
+ 
+ fitted(fit1, newdata = Predict_10 , summary = TRUE, allow_new_levels = TRUE)%>%
+    bind_cols(Predict_10) %>%
+    mutate(P_R = ifelse(PAR == 0, "Respiration", "Net Production"))%>%
+  ggplot(aes(x = Covercenter, y = Estimate))+
+    geom_point()+
+    geom_errorbar(aes(ymin = Estimate-Est.Error, ymax= Estimate+Est.Error), width = 0.1)+
+    facet_wrap(~P_R, scale = "free")
+  
+  
+  mean(All_PP_data$PAR[All_PP_data$PAR>0])
+  ## predictions 
+  
+  Newdata2<- tibble(PAR = mean(LTER1_Pnet$PAR, na.rm = TRUE)-seq(-1,1,length.out = 11)*mean(LTER1_Pnet$PAR, na.rm = TRUE),
+                    Tempcenter = seq(-1,1,length.out = 11)*(max(LTER1_Pnet$Temperature_mean, na.rm = TRUE)-
+                                                              min(LTER1_Pnet$Temperature_mean, na.rm = TRUE)))
+  # expand out
+  Newdata2<-Newdata2 %>%
+    mutate(PAR_per = seq(75,-75,length.out = 11),
+           Temp_per = seq(-75,75,length.out = 11)) %>%
+    expand.grid() %>%
+     mutate(Covercenter = 0,
+           Flowmean = 0)
+  
+  post<-posterior_predict(fit1,newdata = Newdata2)%>%
+    as_tibble()
+  
+  post2<-post %>%
+    colMeans()
+  
+  New_update<-Newdata2 %>%
+    mutate(Estimate = as.numeric(post2),
+           percent_change = 100*(Estimate - 20)/20,
+           par_pro = 100*(PAR/mean(LTER1_Pnet$PAR, na.rm = TRUE)-1 ),
+           temp_pro = 100*(Tempcenter/(max(LTER1_Pnet$Temperature_mean, na.rm = TRUE)-
+                                         min(LTER1_Pnet$Temperature_mean, na.rm = TRUE)))-1 )
+  
+  
+  New_update%>%
+    #  filter(par_pro > -50 & par_pro < 50)%>%
+    #  filter(temp_pro > -50 & temp_pro < 50) %>%
+    ggplot(aes(x = par_pro, 
+               y = temp_pro, 
+               fill = percent_change))+
+    geom_tile()+
+    scale_fill_gradient2(limits = c(-100,100), low = "red", high = "blue", midpoint = 0, mid = "white") +
+    labs(x = "PAR (% change from mean)",
+         y = "Temperature (% change from mean)",
+         fill = "% change in PP")+
+    theme_classic()
+  
