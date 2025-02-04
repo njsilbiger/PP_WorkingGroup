@@ -140,7 +140,90 @@ Seasonal_Averages <-All_PP_data %>%
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
   
-  
+Seasonal_Averages <-All_PP_data %>%
+  mutate(NP = PP,# remove nighttime respiration for average NP
+         R = ifelse(PAR == 0, PP, NA) # only include night data for R
+  ) %>% 
+  group_by(Year, Season) %>%
+  summarise(NP_mean = mean(NP, na.rm = TRUE),
+            NP_SE = sd(NP, na.rm = TRUE)/sqrt(n()),
+            GP_mean = mean(GP, na.rm = TRUE),
+            GP_SE = sd(GP, na.rm = TRUE)/sqrt(n()),
+            R_mean = mean(R, na.rm = TRUE),
+            R_SE = sd(R, na.rm = TRUE)/sqrt(n()),
+            Temperature_mean = mean(Temperature_mean, na.rm = TRUE),
+            Flow_mean = mean(Flow_mean, na.rm = TRUE),
+            PAR_mean = mean(PAR, na.rm = TRUE)
+  ) %>%
+  left_join(TotalLiving %>%
+              filter(Site == "LTER 1"))
+
+daily_data<-All_PP_data %>%
+  group_by(Year, Season, Date)%>%
+  summarise(daily_GP = mean(GP,na.rm = TRUE),
+            daily_R = mean(PP[PAR==0], na.rm = TRUE),
+            daily_temp = mean(Temperature_mean, na.rm = TRUE),
+            daily_PAR = mean(PAR[PAR>0], na.rm = TRUE),
+            daily_flow = mean(Flow_mean, na.rm = TRUE),
+            daily_NP = mean(PP, na.rm = TRUE)) %>%
+  mutate(GP_R = abs(daily_GP/daily_R))%>%
+  left_join(TotalLiving %>%
+              filter(Site == "LTER 1"))
+
+daily_data %>%
+  filter(GP_R<5)%>%
+  ggplot(aes(x = daily_temp, y = GP_R))+
+  geom_point(aes(color = daily_flow))+
+  geom_smooth()
+  #geom_smooth(method = 'nls', formula = "y ~ a*x^b", start = list(a=1,b=1),se=FALSE)
+  geom_smooth()
+facet_wrap(~Season)
+
+#standardized 
+std.data<-daily_data %>%
+  filter(GP_R<5) %>%
+  mutate(temp_scale = scale(daily_temp),
+         flow_scale = scale(daily_flow),
+         PAR_scale = scale(daily_PAR))
+
+gp.mod<-lmer(data = std.data, 
+           formula = GP_R ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
+
+intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(gp.mod)$mean_alive)),
+       intercept = as.numeric(ranef(gp.mod)$mean_alive[,1])) 
+
+# how does cover modulate GP_R
+intercepts %>%
+  ggplot(aes(x = mean_alive, y = intercept))+
+  geom_point()
+
+
+
+gpp.mod<-lmer(data = std.data, 
+             formula = daily_GP ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
+
+summary(gpp.mod)
+
+intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(gpp.mod)$mean_alive)),
+                   intercept = as.numeric(ranef(gpp.mod)$mean_alive[,1])) 
+
+intercepts %>%
+  ggplot(aes(x = mean_alive, y = intercept))+
+  geom_point()
+
+r.mod<-lmer(data = std.data, 
+              formula = -daily_R ~temp_scale+flow_scale+(1|mean_alive))
+
+summary(r.mod)
+
+intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(r.mod)$mean_alive)),
+                   intercept = as.numeric(ranef(r.mod)$mean_alive[,1])) 
+
+intercepts %>%
+  ggplot(aes(x = mean_alive, y = intercept))+
+  geom_point()
+
+
 Seasonal_Averages %>%
   ggplot(aes(x = Year, y = GP_mean ))+
   geom_point()+
@@ -160,6 +243,16 @@ Seasonal_Averages %>%
   geom_point()+
   facet_wrap(~Season)
   
+
+
+Seasonal_Averages %>%
+  #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+  ggplot(aes(x = mean_alive, y = abs(GP_mean/R_mean),color = mean_alive ))+
+  #geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+  geom_point()+
+  #geom_smooth()+
+  facet_wrap(~Season, scales = "free")
+
   NP_model<-brm(
     bf(NP_mean~Year*Season, nu = 3), data = Seasonal_Averages, 
                 family = "student", control = list(max_treedepth = 14))
