@@ -8,6 +8,8 @@ library(tidyverse)
 library(here)
 library(brms)
 library(tidybayes)
+library(lme4)
+library(lmerTest)
 
 ### Read in the data ######
 
@@ -30,14 +32,16 @@ All_PP_data<-All_PP_data %>%
          DN_Oxy = ifelse(DateTime< ymd_hms("2014-03-01 00:00:00"), (DN_Oxy/32)*1000, DN_Oxy),
          PP = ifelse(DateTime< ymd_hms("2014-03-01 00:00:00"), (PP/32)*1000, PP))%>%
   mutate(Date = as_date(DateTime),
+         DielDateTime = DateTime+hours(12), # all sampling started at noon such that midnight was the middle of a "day". Use this to extract the "daily" R to calculating GP
+         DielDate = as_date(DielDateTime),
          Year = year(DateTime)) %>%
-  filter(!Date %in% mdy("5/27/2011","5/28/2011")) %>% # the respiration rate is in correct these days from instrument failure
+  filter(!Date %in% mdy("5/27/2011","5/28/2011")) %>%  # the respiration rate is incorrect these days from instrument failure
   filter(Season != "Summer" | Year != "2007")
 
 # calculate hourly GP and R data 
 Daily_R <-All_PP_data %>%
   filter(PAR==0)%>% # pull out all the night data
-  group_by(Year, Season, Date) %>% # get the average nighttime respiration by day to add to NEP to calcualte GP
+  group_by(Year, Season, DielDate) %>% # get the average nighttime respiration by day to add to NEP to calcualte GP
   summarise(R_average = mean(PP, na.rm = TRUE))
 
 # Get NP and calculate GP  
@@ -122,23 +126,6 @@ TotalLiving<-Benthic_summary_Algae %>%
   summarise(mean_alive = sum(mean_cover))
 
 
-Seasonal_Averages <-All_PP_data %>%
-  mutate(NP = ifelse(PAR == 0, NA, PP),# remove nighttime respiration for average NP
-         R = ifelse(PAR == 0, PP, NA) # only include night data for R
-         ) %>% 
-  group_by(Year, Season) %>%
-  summarise(NP_mean = mean(NP, na.rm = TRUE),
-            NP_SE = sd(NP, na.rm = TRUE)/sqrt(n()),
-            GP_mean = mean(GP, na.rm = TRUE),
-            GP_SE = sd(GP, na.rm = TRUE)/sqrt(n()),
-            R_mean = mean(R, na.rm = TRUE),
-            R_SE = sd(R, na.rm = TRUE)/sqrt(n()),
-            Temperature_mean = mean(Temperature_mean, na.rm = TRUE),
-            Flow_mean = mean(Flow_mean, na.rm = TRUE),
-            PAR_mean = mean(PAR, na.rm = TRUE)
-          ) %>%
-  left_join(TotalLiving %>%
-              filter(Site == "LTER 1"))
   
 Seasonal_Averages <-All_PP_data %>%
   mutate(NP = PP,# remove nighttime respiration for average NP
@@ -159,7 +146,7 @@ Seasonal_Averages <-All_PP_data %>%
               filter(Site == "LTER 1"))
 
 daily_data<-All_PP_data %>%
-  group_by(Year, Season, Date)%>%
+  group_by(Year, Season, DielDate)%>%
   summarise(daily_GP = mean(GP,na.rm = TRUE),
             daily_R = mean(PP[PAR==0], na.rm = TRUE),
             daily_temp = mean(Temperature_mean, na.rm = TRUE),
@@ -174,10 +161,10 @@ daily_data %>%
   filter(GP_R<5)%>%
   ggplot(aes(x = daily_temp, y = GP_R))+
   geom_point(aes(color = daily_flow))+
-  geom_smooth()
+  geom_smooth()+
   #geom_smooth(method = 'nls', formula = "y ~ a*x^b", start = list(a=1,b=1),se=FALSE)
   geom_smooth()
-facet_wrap(~Season)
+#facet_wrap(~Season)
 
 #standardized 
 std.data<-daily_data %>%
@@ -230,6 +217,12 @@ Seasonal_Averages %>%
   geom_errorbar(aes(ymin = GP_mean - GP_SE, ymax = GP_mean+GP_SE))+
   geom_smooth(method = "lm")
 
+daily_data %>%
+  ggplot(aes(x = Year, y = daily_GP))+
+  geom_point()+
+  geom_smooth(method = "lm")
+  facet_wrap(~Season)
+
 Seasonal_Averages %>%
   ggplot(aes(x = Year, y = R_mean ))+
   geom_errorbar(aes(ymin = R_mean - R_SE, ymax = R_mean+R_SE))+
@@ -247,7 +240,7 @@ Seasonal_Averages %>%
 
 Seasonal_Averages %>%
   #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
-  ggplot(aes(x = mean_alive, y = abs(GP_mean/R_mean),color = mean_alive ))+
+  ggplot(aes(x = Year, y = abs(GP_mean/R_mean),color = mean_alive ))+
   #geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
   geom_point()+
   #geom_smooth()+
@@ -509,4 +502,6 @@ All_PP_data %>%
          y = "Temperature (% change from mean)",
          fill = "% change in PP")+
     theme_classic()
+  
+  
   
