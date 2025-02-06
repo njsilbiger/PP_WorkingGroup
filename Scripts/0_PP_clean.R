@@ -10,6 +10,7 @@ library(brms)
 library(tidybayes)
 library(lme4)
 library(lmerTest)
+library(scales)
 
 ### Read in the data ######
 
@@ -36,7 +37,8 @@ All_PP_data<-All_PP_data %>%
          DielDate = as_date(DielDateTime),
          Year = year(DateTime)) %>%
   filter(!Date %in% mdy("5/27/2011","5/28/2011")) %>%  # the respiration rate is incorrect these days from instrument failure
-  filter(Season != "Summer" | Year != "2007")
+  filter(Season != "Summer" | Year != "2007") %>%
+  filter(!DielDate %in% mdy("1/22/2020", "1/18/2017","5/28/2009","3/2/2022")) # these are extreme outliers
 
 # calculate hourly GP and R data 
 Daily_R <-All_PP_data %>%
@@ -44,13 +46,13 @@ Daily_R <-All_PP_data %>%
   group_by(Year, Season, DielDate) %>% # get the average nighttime respiration by day to add to NEP to calcualte GP
   summarise(R_average = mean(PP, na.rm = TRUE))
 
-# Get NP and calculate GP  
+#Calculate GP
 All_PP_data<-All_PP_data %>%
   left_join(Daily_R) %>%
   mutate(GP = PP - R_average) %>%
   mutate(GP = ifelse(PAR == 0, NA, GP),# remove GP from any of the night data 
-         Temperature_mean = (UP_Temp+ DN_Temp)/2,
-         Flow_mean = (UP_Velocity_mps+DN_Velocity_mps)/2) 
+         Temperature_mean = (UP_Temp+ DN_Temp)/2, # average temperature for the site
+         Flow_mean = (UP_Velocity_mps+DN_Velocity_mps)/2) # average flow for the site
 
 
 # Bob's transect percent cover data
@@ -148,43 +150,78 @@ Seasonal_Averages <-All_PP_data %>%
 daily_data<-All_PP_data %>%
   group_by(Year, Season, DielDate)%>%
   summarise(daily_GP = mean(GP,na.rm = TRUE),
-            daily_R = mean(PP[PAR==0], na.rm = TRUE),
+            daily_P = mean(PP[PP>0], na.rm = TRUE),
+            daily_R = mean(PP[PP<0], na.rm = TRUE),
             daily_temp = mean(Temperature_mean, na.rm = TRUE),
             daily_PAR = mean(PAR[PAR>0], na.rm = TRUE),
             daily_flow = mean(Flow_mean, na.rm = TRUE),
             daily_NP = mean(PP, na.rm = TRUE)) %>%
-  mutate(GP_R = abs(daily_GP/daily_R))%>%
+  mutate(P_R = abs(daily_P/daily_R))%>% # average P to average R
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
 
 daily_data %>%
-  filter(GP_R<5)%>%
-  ggplot(aes(x = daily_temp, y = GP_R))+
+  filter(P_R<4)%>%
+  ggplot(aes(x = daily_temp, y = P_R))+
   geom_point(aes(color = daily_flow))+
-  geom_smooth()+
+  geom_smooth(method = "lm")
   #geom_smooth(method = 'nls', formula = "y ~ a*x^b", start = list(a=1,b=1),se=FALSE)
-  geom_smooth()
+
+daily_data %>%
+  filter(P_R<4)%>% ## need to find the GP/R values that make no sense
+  ggplot(aes(x =daily_flow, y = P_R))+
+  geom_point(aes(color = daily_flow))+
+  geom_smooth(method = "lm")+
+  scale_x_continuous(trans = "log",
+                     labels = label_number(accuracy = 0.01)) # 2 decimal places
+  
+daily_data %>%
+  filter(P_R<4)%>% ## need to find the GP/R values that make no sense
+  ggplot(aes(x =daily_flow, y = P_R))+
+  geom_point(aes(color = daily_flow))+
+  geom_smooth(method = "lm")+
+  scale_x_continuous(trans = "log",
+                     labels = label_number(accuracy = 0.01)) # 2 decimal places
+
+daily_data %>%
+  filter(P_R<4)%>% ## need to find the GP/R values that make no sense
+  ggplot(aes(x =mean_alive, y = P_R))+
+  geom_point(aes(color = daily_flow))+
+  geom_smooth(method = "lm")+
+  #scale_x_continuous(trans = "log",
+  #                   labels = label_number(accuracy = 0.01)) + # 2 decimal places
+  facet_wrap(~Season)
+
+
+daily_data %>%
+  filter(P_R<4)%>% ## need to find the GP/R values that make no sense
+  ggplot(aes(x =daily_PAR, y = P_R))+
+  geom_point(aes(color = daily_flow))+
+  geom_smooth(method = "lm")+
+  scale_x_continuous(trans = "log",
+                     labels = label_number(accuracy = 0.01)) 
+
 #facet_wrap(~Season)
 
 #standardized 
 std.data<-daily_data %>%
-  filter(GP_R<5) %>%
+  filter(P_R<5) %>%
   mutate(temp_scale = scale(daily_temp),
-         flow_scale = scale(daily_flow),
+         flow_scale = scale(log(daily_flow)),
          PAR_scale = scale(daily_PAR))
 
-gp.mod<-lmer(data = std.data, 
-           formula = GP_R ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
+pr.mod<-lmer(data = std.data, 
+           formula = P_R ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
 
-intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(gp.mod)$mean_alive)),
-       intercept = as.numeric(ranef(gp.mod)$mean_alive[,1])) 
+intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(pr.mod)$mean_alive)),
+       intercept = as.numeric(ranef(pr.mod)$mean_alive[,1])) 
 
 # how does cover modulate GP_R
 intercepts %>%
   ggplot(aes(x = mean_alive, y = intercept))+
   geom_point()
 
-
+anova(pr.mod)
 
 gpp.mod<-lmer(data = std.data, 
              formula = daily_GP ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
@@ -504,4 +541,8 @@ All_PP_data %>%
     theme_classic()
   
   
+  ggplot(daily_data %>% filter (Year>2007), aes(x = Year, y = daily_NP))+ 
+    geom_point()+
+    geom_label(aes(label = DielDate))
+    geom_smooth(method = "lm", formula = "y~poly(x,2)")
   
