@@ -36,9 +36,8 @@ All_PP_data<-All_PP_data %>%
          DielDateTime = DateTime+hours(12), # all sampling started at noon such that midnight was the middle of a "day". Use this to extract the "daily" R to calculating GP
          DielDate = as_date(DielDateTime),
          Year = year(DateTime)) %>%
-  filter(!Date %in% mdy("5/27/2011","5/28/2011", "1/24/2007",
-                        "1/22/2007", "1/23/2007","1/21/2014","05/25/2024" ))   # the respiration rate is incorrect these days from instrument failure
-  #filter(Season != "Summer" | Year != "2007") 
+  filter(!Date %in% mdy("5/27/2011","5/28/2011","1/21/2014","05/25/2024" ))   # the respiration rate is incorrect these days from instrument failure
+ 
   #filter(!DielDate %in% mdy("1/22/2020", "1/18/2017","5/28/2009","3/2/2022")) # these are extreme outliers
 
 # find all the incomplete datasets (less than 24 hours) and only keep the complete ones
@@ -265,10 +264,10 @@ Seasonal_Averages %>%
   ggplot(aes(x = Year, y = R_mean ))+
   geom_errorbar(aes(ymin = R_mean - R_SE, ymax = R_mean+R_SE))+
   geom_point()+
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm")+
+  facet_wrap(~Season)
 
 Seasonal_Averages %>%
-  filter(Year != 2007)%>%
   #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
   ggplot(aes(x = Year, y = NP_mean,color = Season ))+
   geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
@@ -281,8 +280,11 @@ Seasonal_Averages %>%
   ggplot(aes(x = Year, y = abs(GP_mean/R_mean),color = mean_alive ))+
   #geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
   geom_point()+
-  #geom_smooth()+
+  geom_smooth(method = "lm", formula = "y~poly(x,2)")+
   facet_wrap(~Season, scales = "free")
+###########################################
+
+
 
   NP_model<-brm(
     bf(NP_mean~Year*Season, nu = 3), data = Seasonal_Averages, 
@@ -290,7 +292,6 @@ Seasonal_Averages %>%
 
 
   Seasonal_Averages %>%
-    filter(!Year %in% c("2007"))%>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
     ggplot(aes(x = Year, y = NP_mean,color = Flow_mean ))+
     geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
@@ -300,7 +301,6 @@ Seasonal_Averages %>%
   
   
   Seasonal_Averages %>%
-    filter(!Year %in% c("2007"))%>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
     ggplot(aes(x = Year, y = PAR_mean))+
     #geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
@@ -310,7 +310,8 @@ Seasonal_Averages %>%
   
   All_PP_data %>%
   ggplot(aes(x = PAR, y = PP))+
-  geom_point()
+  geom_point(aes(color = as.factor(DielDate)))+
+  facet_wrap(Year~Season, scale = "free")
 
 All_PP_data %>%
   filter(PAR>0) %>% # Only grab data with light
@@ -322,26 +323,70 @@ All_PP_data %>%
   summarise(TotalPAR_mean = mean(TotalPAR, na.rm = TRUE),
             TotalPAR_SE = sd(TotalPAR, na.rm = TRUE)/sqrt(n()))%>%
   ggplot(aes(x = Year, y = TotalPAR_mean, color = Season))+
-  geom_point()
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Season)
+
 
 All_PP_data %>%
-  filter(PAR > 0)%>%
-  ggplot(aes(x = PAR, y = PP, group = Date, color = Date))+
+  filter(PAR>0) %>% # Only grab data with light
+  mutate(PAR = PAR/1000000) %>% # conver to mols 3600*12/1000000
+  group_by(Year, Season, DielDate)%>%
+  summarise(DailyMaxPAR = mean(PAR, na.rm = TRUE))%>% # get the daily total PAR
+  mutate(DailyMaxPAR = DailyMaxPAR*60*60*12)%>%
+  group_by(Year, Season) %>% # get average by deployment
+  summarise(TotalPAR_mean = mean(DailyMaxPAR, na.rm = TRUE),
+            TotalPAR_SE = sd(DailyMaxPAR, na.rm = TRUE)/sqrt(n()))%>%
+  ggplot(aes(x = Year, y = TotalPAR_mean, color = Season))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Season)
+  
+
+## calcualte % time less than 1000 (will replace with Ik)
+All_PP_data %>%
+  mutate(less_1000 = ifelse(PAR<1200,1,0))%>%
+  group_by(Year, Season, DielDate)%>%
+  summarise(less_counts = sum(less_1000),
+            n = n()# hours in the timeseries, should be 24
+  ) %>%
+  mutate(percent_less = less_counts/n*100) %>%
+  group_by(Year, Season) %>% 
+  summarise(mean_percent = mean(percent_less, na.rm = TRUE))%>%
+  ggplot(aes(x = Year, y = mean_percent, color = Season))+
+  geom_point() +
+  geom_smooth(method = "lm")+
+  facet_wrap(~Season)
+
+  
+All_PP_data %>%
+  filter(PAR>0)%>%
+  ggplot(aes(x = PAR, y = Year, group = Year, height = after_stat(density)))+
+  geom_density_ridges(alpha = 0.5, stat = "density")+
+  scale_x_continuous(trans = "log")+
+  facet_wrap(~Season, scale = "free_x")
+
+
+
+All_PP_data %>%
+  #filter(PAR > 0)%>%
+  ggplot(aes(x = PAR, y = PP, group = DielDate, color = DielDate))+
   geom_point()+
  # geom_smooth(method = "lm")+
-  facet_wrap(~Date)
+  facet_wrap(~DielDate)
   
   All_PP_data %>%
     filter(PAR>0)%>%
     ggplot(aes(x = mean_solar_rad_kwpm2, y = PAR))+
     geom_point()
+    #facet_wrap(~DielDate)
   
   All_PP_data %>%
     filter(PAR>0)%>%
     group_by(Year, Season)%>%
     summarise(mean_solar = mean(mean_solar_rad_kwpm2, na.rm = TRUE),
               mean_PAR = mean(PAR, na.rm = TRUE))%>%
-    ggplot(aes(y = mean_PAR, x = Year))+
+    ggplot(aes(y = mean_solar, x = Year, color = Season))+
     geom_point()+
     geom_smooth(method = "lm")
    
@@ -363,9 +408,9 @@ All_PP_data %>%
     ggplot(aes(x = PAR, y = PP, group = Date))+
     geom_point(aes(color = PAR), size = 2)+
     #   scale_color_continuous(trans = "log")+
-    geom_smooth()+
+    #geom_smooth()+
     geom_hline(yintercept = 0)+
-    facet_wrap(~Date)
+    facet_wrap(~DielDate)
   
   
   All_PP_data<-All_PP_data %>%
@@ -375,32 +420,146 @@ All_PP_data %>%
   LTER1_Pnet <-All_PP_data %>%
     mutate(tempc = Temperature_mean,
            Flowmean = Flow_mean,
+           cover = mean_alive,
+           flow_log = log(Flowmean), # log scal the flow data since it fits in a power function
           # daily_R = -daily_R
            )%>%
     mutate(PARcenter = as.numeric(scale(PAR, center = TRUE, scale = FALSE)),
            Covercenter = as.numeric(scale(mean_alive, center = TRUE, scale = FALSE)),
            Tempcenter = as.numeric(scale(Temperature_mean, center = TRUE, scale = FALSE)),
            Flowcenter = as.numeric(scale(Flow_mean, center = TRUE, scale = FALSE)))
+
+  ### Run PI curves allowing Rd and Pmax to change by cover, temperature, and flow based on what we know from biology
+  ## add them in stepwise and then use loo for a model selection to chose the best fit model
   
-  
-  fit1<-brm(
+ # the base model -  a PI curve where Pmax and Rd is constant 
+  fit1_base<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
-        nl = TRUE, alpha~1,Pmax~Tempcenter +Flowmean + Covercenter,
-       Rd~Tempcenter+Covercenter+ Flowcenter)+ student(),
+        nl = TRUE, alpha~1,Pmax~1,
+       Rd~1)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
-   # prior = c(
-   #   prior(normal(1,100), nlpar = "alpha", lb = 0), 
-   #   prior(normal(400,100), nlpar = "Pmax", lb = 0),
-    #  prior(normal(1000, 500), nlpar = "Rd", lb = 0)
-   # ), 
-  control = list(adapt_delta = 0.99, max_treedepth = 20), 
-  #  init = my_inits,
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+      ), 
+  control = list(adapt_delta = 0.95, max_treedepth = 20), 
+     cores = 4, 
+    chains = 3, seed = 12, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+ 
+  # fit a Rd to vary by cover -  hypothesis that your Rd will drop with a lower biomass of benthic orgs  
+  fit1_a<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+       nl = TRUE, alpha~1,Pmax~1,
+       Rd~cover)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+    ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
     cores = 4, 
-    chains = 3, seed = 11, iter = 8000, warmup = 2000
+    chains = 3, seed = 12, iter = 8000, warmup = 2000
     #silent = TRUE
   ) 
   
+  
+  # vary pmax by flow - addition to cover and Rd, Pmax will also increase with log flow 
+  fit1_b<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+       nl = TRUE, alpha~1,Pmax~flow_log,
+       Rd~cover)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+    ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+     cores = 4, 
+    chains = 3, seed = 12, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+  
+ 
+# add in temperature to pmax, Pmax should increase with temperature--- This is taking forever
+  
+  fit1_c<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+       nl = TRUE, alpha~1,Pmax~flow_log+tempc,
+       Rd~cover)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+     ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+    cores = 4, 
+    chains = 3, seed = 13, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+
+  
+  # add in temperature to Rd, Rd should increase with temperature -  also taking forever
+  ### best fit so far
+  fit1_d<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+       nl = TRUE, alpha~1,Pmax~flow_log,
+       Rd~cover+tempc)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+    ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+    cores = 4, 
+    chains = 3, seed = 13, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+  
+# testing pmax chaning with cover and flow  
+  fit1_e<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+       nl = TRUE, alpha~1,Pmax~flow_log+cover,
+       Rd~cover)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+    prior = c(
+      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+    ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+    cores = 4, 
+    chains = 3, seed = 16, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+  
+  # testing pmax chaning with cover and flow  
+#  fit1_f<-brm(
+#    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
+#       nl = TRUE, alpha~1,Pmax~flow_log+tempc,
+#       Rd~cover+flow_log)+ student(),
+#    data = LTER1_Pnet,
+#    set_rescor(FALSE),
+#    prior = c(
+#      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+#    ), 
+#    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+#    cores = 4, 
+#    chains = 3, seed = 17, iter = 8000, warmup = 2000
+#    #silent = TRUE
+#  ) 
+  
+  
+  loo_compare(loo(fit1_base), 
+              loo(fit1_a), 
+              loo(fit1_b),
+              loo(fit1_c),
+              loo(fit1_d),
+              loo(fit1_e))  
+  
+
+  pp_check(fit1_d)
+    
   # nlf(Pmax ~ a*Flowmean^b)
   
   fit1<-brm(
@@ -546,4 +705,16 @@ All_PP_data %>%
     geom_point()+
     geom_label(aes(label = DielDate))
     geom_smooth(method = "lm", formula = "y~poly(x,2)")
+    
+    # Note Gross water column carbon fixation is 2.6 mmol C m-2 d-1 - alderidge
+    # Look at table 1 from Oxygen metabolism of a fringing reef in French Polynesia A. SOURNIA (1976)
+    All_PP_data %>% group_by(Year, Season, mean_alive)%>% 
+      summarise(mean_up = mean(UP_Oxy, na.rm = TRUE), 
+                mean_dn = mean(DN_Oxy, na.rm = TRUE),
+                mean_o2 = mean((UP_Oxy+DN_Oxy)/2, na.rm = TRUE),
+                mean_np = mean(PP, na.rm = TRUE)) %>% 
+      ggplot(aes(x = mean_np, y = mean_o2))+
+      geom_point(aes(color = mean_alive))+
+      geom_smooth(method = "lm")+
+      theme_bw()
   
