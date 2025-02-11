@@ -53,7 +53,7 @@ All_PP_data<-complete_dates %>%
 Daily_R <-All_PP_data %>%
   #filter(PAR==0)%>% # pull out all the night data
   group_by(Year, Season, DielDate) %>% # get the average nighttime respiration by day to add to NEP to calcualte GP
-  summarise(R_average = mean(PP[PP<0], na.rm = TRUE))
+  summarise(R_average = mean(PP[PAR==0], na.rm = TRUE))
 
 
 #Calculate GP
@@ -61,6 +61,7 @@ All_PP_data<-All_PP_data %>%
   left_join(Daily_R) %>%
   mutate(GP = PP - R_average) %>%
   mutate(#GP = ifelse(PAR == 0, NA, GP),# remove GP from any of the night data 
+         GP = ifelse(PAR == 0, NA, GP),
          GP = ifelse(GP<0, NA, GP),
          Temperature_mean = (UP_Temp+ DN_Temp)/2, # average temperature for the site
          Flow_mean = (UP_Velocity_mps+DN_Velocity_mps)/2) # average flow for the site
@@ -167,7 +168,7 @@ daily_data<-All_PP_data %>%
             daily_PAR = mean(PAR[PAR>0], na.rm = TRUE),
             daily_flow = mean(Flow_mean, na.rm = TRUE),
             daily_NP = mean(PP, na.rm = TRUE)) %>%
-  mutate(P_R = abs(daily_P/daily_R))%>% # average P to average R
+  mutate(P_R = abs(daily_GP/daily_R))%>% # average P to average R
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
 
