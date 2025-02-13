@@ -294,14 +294,61 @@ Seasonal_Averages %>%
                 family = "student", control = list(max_treedepth = 14))
 
 
-  Seasonal_Averages %>%
+NP_all<-  Seasonal_Averages %>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
-    ggplot(aes(x = Year, y = NP_mean,color = Flow_mean ))+
-    geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+    ggplot(aes(x = Year, y = NP_mean*12))+
+  #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+  geom_hline(yintercept = 0, lty = 2)+
+    geom_point()+
+    geom_smooth(method = "lm", formula = "y~x + I(x^2)", color = "black")+
+  labs(x = "",
+       y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+    facet_wrap(~Season)+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 14, face = "bold"))
+  
+GP_all<-  Seasonal_Averages %>%
+    #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+    ggplot(aes(x = Year, y = GP_mean*12))+
+    #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+    geom_point()+
+    geom_smooth(data = Seasonal_Averages %>% filter(Season == "Summer"), method = "lm", formula = "y~x + I(x^2)", color = "black")+
+  geom_smooth(data = Seasonal_Averages %>% filter(Season == "Winter"), method = "lm", color = "black")+
+  labs(x = "",
+       y = expression(atop("Gross production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+    facet_wrap(~Season)+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_blank())
+  
+R_all<-  Seasonal_Averages %>%
+  #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+  ggplot(aes(x = Year, y = -R_mean*12))+
+  #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
+  geom_point()+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "",
+       y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  facet_wrap(~Season)+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_text(size = 12))
+
+NP_all/GP_all/R_all&theme(panel.grid.minor = element_blank(),
+                          axis.text.y = element_text(size = 12),
+                          axis.title.y = element_text(size = 14))&lims(x = c(2008,2024))
+
+ggsave(here("Output","SeasonalRates_time.png"), height = 8, width = 6)
+
+Seasonal_Averages %>%
+    #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
+    ggplot(aes(x = Year, y = GP_mean,color = mean_alive ))+
+    #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
     geom_point()+
     geom_smooth(method = "lm", formula = "y~x + I(x^2)")+
     facet_wrap(~Season, scales = "free")
-  
   
   Seasonal_Averages %>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
@@ -595,11 +642,11 @@ All_PP_data %>%
   # PAR vs PP
 P_PAR<-  as_tibble(Plotdata$PAR) %>%
     ggplot(aes(x = PAR, y = estimate__))+
-    geom_point(data = All_PP_data, aes(x = PAR, y = PP), alpha = 0.05)+
+    #geom_point(data = All_PP_data, aes(x = PAR, y = PP), alpha = 0.05)+
     geom_line()+
-    geom_ribbon(aes(ymin = lower__, ymax = upper__), color = "grey", alpha = 0.5)+
-    labs(x = "PAR (umol photon s)",
-         y = "NEP (mmol O2 m-2 hr-1)")+
+    geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
+    labs(x = expression(paste("PAR ("~mu~"mol photons m"^-2, " s"^-1,")", sep = "")),
+         y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
     theme_bw()
   
   # Temp vs PP
@@ -607,9 +654,9 @@ P_temp<-  as_tibble(Plotdata$tempc) %>%
     ggplot(aes(x = tempc, y = estimate__))+
   #  geom_point(data = All_PP_data, aes(x = Temperature_mean, y = PP), alpha = 0.05)+
     geom_line()+
-    geom_ribbon(aes(ymin = lower__, ymax = upper__), color = "grey", alpha = 0.5)+
-    labs(x = "Temperature (C)",
-         y = "NEP (mmol O2 m-2 hr-1)")+
+    geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
+    labs(x = "Temperature ("~degree~"C)",
+         y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
     theme_bw()
   
   # Temp vs PP
@@ -617,9 +664,9 @@ P_flow<-  as_tibble(Plotdata$flow_log) %>%
     ggplot(aes(x = exp(flow_log), y = estimate__))+
 #    geom_point(data = All_PP_data, aes(x = Flow_mean, y = PP), alpha = 0.05)+
     geom_line()+
-    geom_ribbon(aes(ymin = lower__, ymax = upper__), color = "grey", alpha = 0.5)+
-    labs(x = "Flow (m/s)",
-         y = "NEP (mmol O2 m-2 hr-1)")+
+    geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
+    labs(x = expression(paste("Flow (m s"^-1, ")")),
+         y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
     theme_bw()
   
   # Temp vs PP
@@ -627,13 +674,14 @@ P_cover<-  as_tibble(Plotdata$cover) %>%
     ggplot(aes(x = cover, y = estimate__))+
  #   geom_point(data = All_PP_data, aes(x = mean_alive, y = PP), alpha = 0.05)+
     geom_line()+
-    geom_ribbon(aes(ymin = lower__, ymax = upper__), color = "grey", alpha = 0.5)+
+    geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
     labs(x = "% cover of producers",
-         y = "NEP (mmol O2 m-2 hr-1)")+
+         y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
     theme_bw()
   
 
 (P_PAR + P_flow)/(P_temp+P_cover)  
+ggsave(here("Output","BayesModelFits.png"), width = 8, height = 8)
 ##########################################################
   
   # Testing how much a 1 SD change in light, temperature, producer cover, and flow (model is on the log scale)
@@ -793,135 +841,60 @@ posteriorpred_CI %>%
 ggsave(here("Output","Sensitivityraw.png"), width = 9, height = 6)
 
 #####################
-  
-  
-h <- data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
-                  Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
-                  Tempcenter = rep(-1,250),
-                  Flowmean = rep(0.1,250)) %>%
-    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
-                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
-                         Tempcenter = rep(0,250),
-                         Flowmean = rep(0.2,250)))%>%
-    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
-                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
-                         Tempcenter = rep(1,250),
-                         Flowmean = rep(0.3,250)))%>%
-    bind_rows(data.frame(PAR=rep(seq(0,2000, length.out = 50),5), 
-                         Covercenter = c(rep(-20,50),rep(-10,50), rep(0,50), rep(10,50),rep(20,50)),
-                         Tempcenter = rep(1,250),
-                         Flowmean = rep(0.4,250)))
-  
-  pred<-predict(fit1, newdata = h, summary = TRUE, allow_new_levels = TRUE) %>%
-    bind_cols(h) %>%
-    mutate(Covercenter = as.factor(Covercenter),
-           Tempcenter = as.factor(Tempcenter),
-           Flowmean = as.factor(Flowmean))
-  
-  ggplot(pred, aes(x= PAR, y  =Estimate))+
-    scale_color_manual(values = c("blue","pink","red"))+
-    geom_point(data = LTER1_Pnet, aes(x = PAR, 
-                                      y = PP, 
-                                      size = mean_alive,
-                                     # fill = Flow_mean
-                                      ), shape = 21, alpha = 0.1)+
-    geom_line(aes(color = Tempcenter, lty = Covercenter, linewidth = Flowmean))+
-    scale_linewidth_discrete(range = c(0.1,1))+
-   # scale_alpha(range =c(0.5,1))+
-    labs(y = "NEP")
-  
-  
-  # 10% change in PP at ~ average PAR and in the dark
-  Predict_10 <-tibble(PAR = c(730,0,730,0,730,0,730,0,730,0,730,0), 
-                         Tempcenter = c(0,0,0,0,0,0,1.1,1.1,0,0,0,0), 
-                         Flowmean = c(rep(mean(LTER1_Pnet$Flowmean, na.rm = TRUE),8),
-                                      c(mean(LTER1_Pnet$Flowmean, na.rm = TRUE),mean(LTER1_Pnet$Flowmean, na.rm = TRUE),
-                                        mean(LTER1_Pnet$Flowmean, na.rm = TRUE)*1.1, mean(LTER1_Pnet$Flowmean, na.rm = TRUE)*1.1)),
-                         Covercenter = c(0,0,10,10,0,0,0,0,0,0,0,0),
-                       model = c("Cover","Cover","Cover","Cover", "Temp","Temp","Temp","Temp", "Flow","Flow","Flow","Flow"),
-                      change = c("Average","Average","Change","Change","Average","Average","Change","Change","Average","Average","Change","Change"))
-  
- Percent_10<- fitted(fit1, newdata = Predict_10 , summary = TRUE, allow_new_levels = TRUE)%>%
-    bind_cols(Predict_10) %>%
-    mutate(P_R = ifelse(PAR == 0, "Respiration", "Net Production")) %>%
-    group_by(P_R, model)%>%
-    reframe(Percent_change = 100*(Estimate[change == "Average"]- Estimate[change == "Change"])/Estimate[change == "Average"])
-    
-  
- Percent_10 %>%
- ggplot(aes(x = model, y = Percent_change))+
-   geom_col()+
-   labs(y = "Percent Change in PP",
-        x = "10% increase in each parameter")+
-   facet_wrap(~P_R)+
-   theme_bw()
-  ggsave(here("Output","PercentChange.png"))  
- 
- fitted(fit1, newdata = Predict_10 , summary = TRUE, allow_new_levels = TRUE)%>%
-    bind_cols(Predict_10) %>%
-    mutate(P_R = ifelse(PAR == 0, "Respiration", "Net Production"))%>%
-  ggplot(aes(x = Covercenter, y = Estimate))+
-    geom_point()+
-    geom_errorbar(aes(ymin = Estimate-Est.Error, ymax= Estimate+Est.Error), width = 0.1)+
-    facet_wrap(~P_R, scale = "free")
-  
-  
-  mean(All_PP_data$PAR[All_PP_data$PAR>0])
-  ## predictions 
-  
-  Newdata2<- tibble(PAR = mean(LTER1_Pnet$PAR, na.rm = TRUE)-seq(-1,1,length.out = 11)*mean(LTER1_Pnet$PAR, na.rm = TRUE),
-                    Tempcenter = seq(-1,1,length.out = 11)*(max(LTER1_Pnet$Temperature_mean, na.rm = TRUE)-
-                                                              min(LTER1_Pnet$Temperature_mean, na.rm = TRUE)))
-  # expand out
-  Newdata2<-Newdata2 %>%
-    mutate(PAR_per = seq(75,-75,length.out = 11),
-           Temp_per = seq(-75,75,length.out = 11)) %>%
-    expand.grid() %>%
-     mutate(Covercenter = 0,
-           Flowmean = 0)
-  
-  post<-posterior_predict(fit1,newdata = Newdata2)%>%
-    as_tibble()
-  
-  post2<-post %>%
-    colMeans()
-  
-  New_update<-Newdata2 %>%
-    mutate(Estimate = as.numeric(post2),
-           percent_change = 100*(Estimate - 20)/20,
-           par_pro = 100*(PAR/mean(LTER1_Pnet$PAR, na.rm = TRUE)-1 ),
-           temp_pro = 100*(Tempcenter/(max(LTER1_Pnet$Temperature_mean, na.rm = TRUE)-
-                                         min(LTER1_Pnet$Temperature_mean, na.rm = TRUE)))-1 )
-  
-  
-  New_update%>%
-    #  filter(par_pro > -50 & par_pro < 50)%>%
-    #  filter(temp_pro > -50 & temp_pro < 50) %>%
-    ggplot(aes(x = par_pro, 
-               y = temp_pro, 
-               fill = percent_change))+
-    geom_tile()+
-    scale_fill_gradient2(limits = c(-100,100), low = "red", high = "blue", midpoint = 0, mid = "white") +
-    labs(x = "PAR (% change from mean)",
-         y = "Temperature (% change from mean)",
-         fill = "% change in PP")+
-    theme_classic()
-  
-  
-  ggplot(daily_data %>% filter (Year>2007), aes(x = Year, y = daily_NP))+ 
-    geom_point()+
-    geom_label(aes(label = DielDate))
-    geom_smooth(method = "lm", formula = "y~poly(x,2)")
-    
+## plot observed versus predicted values
+
+predicted<-predict(fit1_d, newdata = LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover)) %>%
+  bind_cols(LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover))
+
+
+
+# calculate a psuedo-R2 (currently 0.784)
+predicted %>%
+  mutate(residual = PP-Estimate) %>%
+  reframe(SSR = sum(residual^2),
+          SST = sum((PP-mean(PP))^2),
+          R2 = 1-(SSR/SST))
+
+# plot the observed versus predicted values of the model
+OP_plot<-predicted %>%
+  ggplot(aes(x = PP, y = Estimate))+
+  geom_point(alpha = 0.5)+
+  labs(x = expression(paste("Observed NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
+       y = expression(paste("Predicted NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
+  geom_abline(slope = 1, linewidth = 1, color = "blue")+
+  annotate("text", x = -25, y = 150, label = expression(paste("R"^2,"=0.78")))+
+  xlim(-100, 200)+
+  ylim(-100,200)+
+  theme_classic()
+
+# posterior predictive checks
+PP_plot<-pp_check(fit1_d)+
+  labs(x =  expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
+       y = "Density")+
+  theme_classic()
+
+OP_plot+PP_plot
+ggsave(here("Output","PosteriorChecks.png"), width = 8, height = 4)
+
+
+##### relationship between NEP and O2
+
     # Note Gross water column carbon fixation is 2.6 mmol C m-2 d-1 - alderidge
     # Look at table 1 from Oxygen metabolism of a fringing reef in French Polynesia A. SOURNIA (1976)
-    All_PP_data %>% group_by(Year, Season, mean_alive)%>% 
+    All_PP_data %>% group_by(Year, Season, mean_alive, DielDate)%>% 
       summarise(mean_up = mean(UP_Oxy, na.rm = TRUE), 
                 mean_dn = mean(DN_Oxy, na.rm = TRUE),
                 mean_o2 = mean((UP_Oxy+DN_Oxy)/2, na.rm = TRUE),
-                mean_np = mean(PP, na.rm = TRUE)) %>% 
+                se_o2 = sd((UP_Oxy+DN_Oxy)/2, na.rm = TRUE)/sqrt(n()),
+                mean_np = mean(PP, na.rm = TRUE),
+                se_np = sd(PP,na.rm = TRUE)/sqrt(n())) %>% 
       ggplot(aes(x = mean_np, y = mean_o2))+
-      geom_point(aes(color = mean_alive))+
-      geom_smooth(method = "lm")+
+      geom_point(aes(color = Year), alpha = 0.5)+
+   #   geom_errorbar(aes(ymin = mean_o2-se_o2, ymax = mean_o2+se_o2))+
+  #    geom_errorbar(aes(xmin = mean_np-se_np, xmax = mean_np+se_np))+
+      geom_smooth(method = "lm", color = "black")+
+      labs(x = expression(paste("Daily mean NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
+           y = expression(paste("Daily mean O"[2]," ("~mu~"mol L"^-1,")")))+
+      scale_color_viridis_c(option = "E")+
       theme_bw()
-  
+ggsave(here("Output","NEP_O2.png"), width = 5, height = 4)  
