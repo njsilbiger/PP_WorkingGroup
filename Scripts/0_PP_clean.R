@@ -291,9 +291,9 @@ Seasonal_Averages %>%
 
 
 
-  NP_model<-brm(
-    bf(NP_mean~Year + I(Year^2) , nu = 3), data = Seasonal_Averages, 
-                family = "student", control = list(max_treedepth = 14))
+#  NP_model<-brm(
+#    bf(NP_mean~Year + I(Year^2) , nu = 3), data = Seasonal_Averages, 
+#                family = "student", control = list(max_treedepth = 14))
 
 
 NP_all<-  Seasonal_Averages %>%
@@ -538,8 +538,8 @@ All_PP_data %>%
   
   fit1_c<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
-       nl = TRUE, alpha~1,Pmax~flow_log+tempc,
-       Rd~cover)+ student(),
+       nl = TRUE, alpha~1,Pmax~flow_log,
+       Rd~cover+tempc)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
     prior = c(
@@ -556,15 +556,15 @@ All_PP_data %>%
   ### best fit so far
   fit1_d<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
-       nl = TRUE, alpha~1,Pmax~flow_log,
-       Rd~cover+tempc)+ student(),
+       nl = TRUE, alpha~1,Pmax~flow_log+tempc+cover,
+       Rd~cover)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
     prior = c(
       prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
     ), 
     control = list(adapt_delta = 0.95, max_treedepth = 20), 
-    cores = 4, 
+    cores = 3, 
     chains = 3, seed = 13, iter = 8000, warmup = 2000
     #silent = TRUE
   ) 
