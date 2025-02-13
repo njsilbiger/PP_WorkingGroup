@@ -150,6 +150,7 @@ Seasonal_Averages <-All_PP_data %>%
   group_by(Year, Season) %>%
   summarise(NP_mean = mean(NP, na.rm = TRUE),
             NP_SE = sd(NP, na.rm = TRUE)/sqrt(n()),
+            NP_max = max(NP, na.rm = TRUE),
             GP_mean = mean(GP, na.rm = TRUE),
             GP_SE = sd(GP, na.rm = TRUE)/sqrt(n()),
             R_mean = mean(R, na.rm = TRUE),
@@ -169,7 +170,8 @@ daily_data<-All_PP_data %>%
             daily_temp = mean(Temperature_mean, na.rm = TRUE),
             daily_PAR = mean(PAR[PAR>0], na.rm = TRUE),
             daily_flow = mean(Flow_mean, na.rm = TRUE),
-            daily_NP = mean(PP, na.rm = TRUE)) %>%
+            daily_NP = mean(PP, na.rm = TRUE),
+            daily_NP_max = max(PP, na.rm = TRUE)) %>%
   mutate(P_R = abs(daily_GP/daily_R))%>% # average P to average R
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
@@ -683,7 +685,38 @@ P_cover<-  as_tibble(Plotdata$cover) %>%
 (P_PAR + P_flow)/(P_temp+P_cover)  
 ggsave(here("Output","BayesModelFits.png"), width = 8, height = 8)
 ##########################################################
-  
+  ### Looking at the raw data with each level of the model
+
+Temp_raw<-Seasonal_Averages %>% 
+  ggplot(aes(x = Temperature_mean, y = NP_mean*12))+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point(alpha = 0.2)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "Temperature ("~degree~"C)",
+       y = expression(atop("Mean NP", paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()
+
+cover_raw<-Seasonal_Averages %>% 
+  ggplot(aes(x = mean_alive, y = R_mean*12))+
+  geom_point(alpha = 0.2)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "% Cover",
+       y = expression(atop("Mean Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()
+
+flow_raw<-Seasonal_Averages %>% 
+  ggplot(aes(x = Flow_mean, y = NP_max))+
+  geom_point(alpha = 0.2)+
+  geom_smooth(method = "lm", formula = "y~log(x)", color = "black")+
+  labs(x = expression(paste("Flow (m s"^-1,")")),
+       y = expression(atop("Max NEP",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()
+
+cover_raw/flow_raw/Temp_raw
+ggsave(here("Output","RawDatafits.png"), height = 8, width = 6)
+
+
+##########
   # Testing how much a 1 SD change in light, temperature, producer cover, and flow (model is on the log scale)
   
   # First calculate the mean value for each
@@ -844,8 +877,48 @@ ggsave(here("Output","Sensitivityraw.png"), width = 9, height = 6)
 ## plot observed versus predicted values
 
 predicted<-predict(fit1_d, newdata = LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover)) %>%
-  bind_cols(LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover))
+  bind_cols(LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover, Year, Season))
 
+# plot the relationship between cover and Respiration with the model fits
+Resp_predictions<-LTER1_Pnet %>% 
+  select(PP,flow_log, PAR, tempc, cover, Year, Season) %>%
+  add_epred_draws(fit1_d) %>%
+  ungroup() %>%
+  filter(.epred<0) %>%
+  group_by(Year, Season, cover) %>%
+  median_qi(.epred, PP, tempc) 
+
+Resp_predictions %>%
+  arrange(cover)%>%
+  ggplot(aes(x = cover, y = .epred))+
+  #geom_point()+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+Resp_predictions %>%
+  ggplot(aes(x = tempc, y = .epred))+
+  #geom_point()+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+P_predictions<-LTER1_Pnet %>% 
+  select(PP,flow_log, PAR, tempc, cover, Year, Season) %>%
+  add_epred_draws(fit1_d) %>%
+  ungroup() %>%
+  filter(.epred>0) %>%
+  select(tempc,flow_log, .epred, PP, Season, Year) %>%
+  group_by(Year, Season) %>%
+  summarise(PP_max = max(PP, na.rm = TRUE),
+            epred_max = max(.epred, na.rm = TRUE),
+            mean_temp = mean(tempc, na.rm = TRUE),
+            mean_flow = mean(flow_log, na.rm = TRUE))
+
+
+P_predictions %>%
+  ggplot(aes(x = exp(mean_flow), y = epred_max))+
+  geom_point()+
+  geom_smooth(method = "lm", formula="y~log(x)")+
+  theme_bw()
 
 
 # calculate a psuedo-R2 (currently 0.784)
