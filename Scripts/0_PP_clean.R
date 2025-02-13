@@ -327,7 +327,7 @@ GP_all<-  Seasonal_Averages %>%
   
 R_all<-  Seasonal_Averages %>%
   #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
-  ggplot(aes(x = Year, y = -R_mean*12))+
+  ggplot(aes(x = Year, y = R_mean*12))+
   #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
   geom_point()+
   geom_smooth(method = "lm", color = "black")+
