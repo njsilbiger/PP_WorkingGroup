@@ -13,6 +13,7 @@ library(lmerTest)
 library(scales)
 library(patchwork)
 library(ggtext)
+library(ggr)
 
 ### Read in the data ######
 
@@ -215,43 +216,6 @@ std.data<-daily_data %>%
          flow_scale = scale(log(daily_flow)),
          PAR_scale = scale(daily_PAR))
 
-pr.mod<-lmer(data = std.data, 
-           formula = P_R ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
-
-intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(pr.mod)$mean_alive)),
-       intercept = as.numeric(ranef(pr.mod)$mean_alive[,1])) 
-
-# how does cover modulate GP_R
-intercepts %>%
-  ggplot(aes(x = mean_alive, y = intercept))+
-  geom_point()
-
-anova(pr.mod)
-
-gpp.mod<-lmer(data = std.data, 
-             formula = daily_GP ~temp_scale+flow_scale+ PAR_scale+(1|mean_alive))
-
-summary(gpp.mod)
-
-intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(gpp.mod)$mean_alive)),
-                   intercept = as.numeric(ranef(gpp.mod)$mean_alive[,1])) 
-
-intercepts %>%
-  ggplot(aes(x = mean_alive, y = intercept))+
-  geom_point()
-
-r.mod<-lmer(data = std.data, 
-              formula = -daily_R ~temp_scale+flow_scale+(1|mean_alive))
-
-summary(r.mod)
-
-intercepts<-tibble(mean_alive = as.numeric(rownames(ranef(r.mod)$mean_alive)),
-                   intercept = as.numeric(ranef(r.mod)$mean_alive[,1])) 
-
-intercepts %>%
-  ggplot(aes(x = mean_alive, y = intercept))+
-  geom_point()
-
 
 Seasonal_Averages %>%
   ggplot(aes(x = Year, y = GP_mean ))+
@@ -427,7 +391,7 @@ All_PP_data %>%
  # geom_smooth(method = "lm")+
   facet_wrap(~DielDate)
   
-  All_PP_data %>%
+All_PP_data %>%
     filter(PAR>0)%>%
     ggplot(aes(x = mean_solar_rad_kwpm2, y = PAR))+
     geom_point()
@@ -554,10 +518,10 @@ All_PP_data %>%
   
   # add in temperature to Rd, Rd should increase with temperature -  also taking forever
   ### best fit so far
-  fit1_d<-brm(
+  fit1_f<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
        nl = TRUE, alpha~1,Pmax~flow_log+tempc+cover,
-       Rd~cover)+ student(),
+       Rd~cover+tempc)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
     prior = c(
@@ -565,7 +529,7 @@ All_PP_data %>%
     ), 
     control = list(adapt_delta = 0.95, max_treedepth = 20), 
     cores = 3, 
-    chains = 3, seed = 13, iter = 8000, warmup = 2000
+    chains = 3, seed = 14, iter = 8000, warmup = 2000
     #silent = TRUE
   ) 
   
@@ -601,6 +565,9 @@ All_PP_data %>%
 #    #silent = TRUE
 #  ) 
   
+  loo_compare(loo(fit1_d),
+              loo(fit1_e),
+              loo(fit1_f))
   
   loo_compare(loo(fit1_base), 
               loo(fit1_a), 
@@ -696,12 +663,30 @@ Temp_raw<-Seasonal_Averages %>%
        y = expression(atop("Mean NP", paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
 
+
+Temp_raw_resp<-Seasonal_Averages %>% 
+  ggplot(aes(x = Temperature_mean, y = R_mean*12))+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_point(alpha = 0.2)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "Temperature ("~degree~"C)",
+       y = expression(atop("Mean R", paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()
+
 cover_raw<-Seasonal_Averages %>% 
   ggplot(aes(x = mean_alive, y = R_mean*12))+
   geom_point(alpha = 0.2)+
   geom_smooth(method = "lm", color = "black")+
   labs(x = "% Cover",
        y = expression(atop("Mean Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()
+
+cover_raw_NP<-Seasonal_Averages %>% 
+  ggplot(aes(x = mean_alive, y = NP_max*12))+
+  geom_point(alpha = 0.2)+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = "% Cover",
+       y = expression(atop("Max NEP",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
 
 flow_raw<-Seasonal_Averages %>% 
@@ -809,9 +794,7 @@ Pluspercent<-PlusSD %>%
                                name == "mean_alive"~"Cover <br> (27.6%)",
                                name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
-            
-            )
-
+                        )
 
 Minuspercent<- MinusSD %>%
   add_epred_draws(fit1_d) %>%
@@ -827,11 +810,10 @@ Minuspercent<- MinusSD %>%
                                name == "mean_alive"~"Cover <br> (11.3%)",
                                name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
-         
   )
 
 # Make a plot
-Minuspercent %>%
+NP_percent<-Minuspercent %>%
   bind_rows(Pluspercent)%>%
   mutate(order = fct_reorder(Nicenames,percentchange)) %>%  
   mutate(labelspace = ifelse(percentchange>0,12,-12))%>%
@@ -872,7 +854,168 @@ posteriorpred_CI %>%
         strip.text = element_text(face = "bold"))
 
 ggsave(here("Output","Sensitivityraw.png"), width = 9, height = 6)
+#######################
+# DO the same thing but for respiration (set light to 0)
+Pluspercent_R<-PlusSD %>%
+  mutate(PAR = 0) %>% # only calculate in the dark
+  add_epred_draws(fit1_d) %>%
+  ungroup()%>%
+  select(name, .epred, .draw) %>%
+  pivot_wider(names_from = name, values_from = .epred) %>%
+  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
+  group_by(name)%>%
+  median_qi(percentchange) %>%
+  mutate(group = "+1 SD from median") %>%
+  mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
+                               name == "mean_alive"~"Cover <br> (27.6%)",
+                               name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
+                               name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
+         
+  )
 
+Minuspercent_R<- MinusSD %>%
+  mutate(PAR = 0) %>% # only calculate in the dark
+  add_epred_draws(fit1_d) %>%
+  ungroup()%>%
+  select(name, .epred, .draw) %>%
+  pivot_wider(names_from = name, values_from = .epred) %>%
+  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
+  group_by(name)%>%
+  median_qi(percentchange) %>%
+  mutate(group = "-1 SD from median")%>%
+  mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
+                               name == "mean_alive"~"Cover <br> (11.3%)",
+                               name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
+                               name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
+  )
+
+# Make a plot
+R_percent<-Minuspercent_R %>%
+  bind_rows(Pluspercent_R)%>%
+  mutate(order = fct_reorder(Nicenames,percentchange)) %>%  
+  mutate(labelspace = ifelse(percentchange>0,12,-12))%>%
+  ggplot(aes(x = order, y = percentchange))+
+  geom_col()+
+  geom_errorbar(aes(ymin = .lower, ymax = .upper), width = 0.1)+
+  geom_text(aes(y = percentchange+labelspace, 
+                label = paste0(round(percentchange,1),"%")))+
+  labs(x = "",
+       y = "% change in ER")+
+  facet_wrap(~group, scale = "free_x")+
+  theme_bw()+
+  theme(strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_markdown())
+ggsave(here("Output","Sensitivity_R.png"), width = 9, height = 6)
+
+## plot actual respiration data############
+# PlusSD fits
+posteriorpred_CI_plusR <- PlusSD %>%
+  mutate(PAR = 0)%>%
+  add_epred_draws(fit1_d) %>%
+  median_qi() %>% 
+  arrange(.row) %>%
+  mutate(group = ifelse(name == "MeanParam","Mean","+1 SD from median"))
+
+# MinusSD fits together with plus
+posteriorpred_CI_R <- MinusSD %>%
+  mutate(PAR = 0)%>%
+  add_epred_draws(fit1_d) %>%
+  median_qi()%>% 
+  arrange(.row)%>%
+  mutate(group = ifelse(name == "MeanParam","Mean","-1 SD from median")) %>%
+  filter(group != "Mean") %>%
+  bind_rows(posteriorpred_CI_plusR) %>%
+  mutate(group = factor(group, levels = c("-1 SD from median","Mean","+1 SD from median")))
+
+backgroundmeanR<-posteriorpred_CI_R %>% filter(name == "MeanParam")
+
+posteriorpred_CI_R %>%
+  filter(name !="MeanParam") %>% #remove the mean
+  ggplot(aes(x = Nicenames, y = .epred))+
+  geom_rect(aes(ymin = backgroundmeanR$.lower, 
+                ymax = backgroundmeanR$.upper, 
+                xmin = -Inf, xmax = Inf), alpha = 0.5, fill = "firebrick")+
+  geom_hline(yintercept = backgroundmeanR$.epred)+
+  geom_col()+
+  geom_errorbar(aes(ymin = .lower,ymax = .upper), width = 0.1)+
+  facet_grid(~group, scale = "free_x", space = "free")+
+  labs(x = "",
+       y = expression(paste("Respiration (mmol O"[2]," m"^-2, " hr"^-1,")")),
+       caption = expression(paste("Median Values: Flow 0.13 (m s"^-1,"), PAR 688 ("~mu~"mol photons s"^-1,"), Temperature 28.5 ("~degree~C,"), Cover 19.4 (%)")))+
+  theme_bw()+
+  theme(axis.text = element_markdown(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "bold"))
+
+##### Calculate GP###################
+# First I take the draws for NP and then I join them with the draws for R and add them together
+
+MinusPercent_GP<-MinusSD %>%
+  add_epred_draws(fit1_d) %>%
+  ungroup()%>%
+  select(name, .epred, .draw) %>%
+  left_join(MinusSD %>%
+              mutate(PAR = 0)%>% # the respiration draws
+              add_epred_draws(fit1_d) %>%
+              ungroup()%>%
+              select(name, .epred_R = .epred, .draw)) %>%
+  mutate(.epred_GP = .epred - .epred_R) %>%
+  select(-c(.epred,.epred_R))%>%
+  pivot_wider(names_from = name, values_from = .epred_GP) %>%
+  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
+  group_by(name)%>%
+  median_qi(percentchange) %>%
+  mutate(group = "-1 SD from median")%>%
+  mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
+                               name == "mean_alive"~"Cover <br> (11.3%)",
+                               name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
+                               name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
+  )
+
+PlusPercent_GP<-PlusSD %>%
+  add_epred_draws(fit1_d) %>%
+  ungroup()%>%
+  select(name, .epred, .draw) %>%
+  left_join(MinusSD %>%
+              mutate(PAR = 0)%>% # the respiration draws
+              add_epred_draws(fit1_d) %>%
+              ungroup()%>%
+              select(name, .epred_R = .epred, .draw)) %>%
+  mutate(.epred_GP = .epred - .epred_R) %>%
+  select(-c(.epred,.epred_R))%>%
+  pivot_wider(names_from = name, values_from = .epred_GP) %>%
+  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
+  group_by(name)%>%
+  median_qi(percentchange) %>%
+  mutate(group = "+1 SD from median") %>%
+  mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
+                               name == "mean_alive"~"Cover <br> (27.6%)",
+                               name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
+                               name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
+  )
+
+# Make a plot
+GP_percent<-MinusPercent_GP %>%
+  bind_rows(PlusPercent_GP)%>%
+  mutate(order = fct_reorder(Nicenames,percentchange)) %>%  
+  mutate(labelspace = ifelse(percentchange>0,12,-12))%>%
+  ggplot(aes(x = order, y = percentchange))+
+  geom_col()+
+  geom_errorbar(aes(ymin = .lower, ymax = .upper), width = 0.1)+
+  geom_text(aes(y = percentchange+labelspace, 
+                label = paste0(round(percentchange,1),"%")))+
+  labs(x = "",
+       y = "% change in GP")+
+  facet_wrap(~group, scale = "free_x")+
+  theme_bw()+
+  theme(strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_markdown())
 #####################
 ## plot observed versus predicted values
 
