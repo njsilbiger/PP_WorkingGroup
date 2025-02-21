@@ -158,7 +158,7 @@ Seasonal_Averages <-All_PP_data %>%
             R_SE = sd(R, na.rm = TRUE)/sqrt(n()),
             Temperature_mean = mean(Temperature_mean, na.rm = TRUE),
             Flow_mean = mean(Flow_mean, na.rm = TRUE),
-            PAR_mean = mean(PAR, na.rm = TRUE)
+            PAR_mean = mean(PAR[PAR>0], na.rm = TRUE)
   ) %>%
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
