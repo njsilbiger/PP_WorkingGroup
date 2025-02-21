@@ -266,7 +266,8 @@ NP_all<-  Seasonal_Averages %>%
   #  geom_errorbar(aes(ymin = NP_mean - NP_SE, ymax = NP_mean+NP_SE))+
   geom_hline(yintercept = 0, lty = 2)+
     geom_point()+
-    geom_smooth(method = "lm", formula = "y~x + I(x^2)", color = "black")+
+    geom_smooth(data = Seasonal_Averages %>% filter(Season == "Summer"), method = "lm", formula = "y~x + I(x^2)", color = "black")+
+  geom_smooth(data = Seasonal_Averages %>% filter(Season == "Winter"), method = "lm", color = "black")+
   labs(x = "",
        y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
     facet_wrap(~Season)+
