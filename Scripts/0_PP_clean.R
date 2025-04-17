@@ -13,7 +13,8 @@ library(lmerTest)
 library(scales)
 library(patchwork)
 library(ggtext)
-library(ggr)
+library(ggridges)
+library(viridis)
 
 ### Read in the data ######
 
@@ -26,6 +27,8 @@ All_PP_data<-files %>%
   map_df(read_csv,.id = "filename") %>%
   mutate(DateTime = mdy_hm(DateTime))
 
+## Daily NEC 
+NEC<-read_csv(here("Data","NEC_daily.csv"))
 
 # From 2007-2014 the PP units are in g O2/m2/h. 
 #From June 2014 on, the units are mmol O2/m2/h. So those early rates will need to be converted
@@ -140,7 +143,9 @@ Total_Calc<-Benthic_summary_Algae %>%
 TotalLiving<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
   group_by(Year, Site)%>%
-  summarise(mean_alive = sum(mean_cover))
+  summarise(mean_alive = sum(mean_cover),
+            mean_fleshy = sum(mean_cover[name == "Fleshy Macroalgae"]),
+            mean_coral = sum(mean_cover[name == "Coral"]))
 
 
   
@@ -161,7 +166,11 @@ Seasonal_Averages <-All_PP_data %>%
             PAR_mean = mean(PAR[PAR>0], na.rm = TRUE)
   ) %>%
   left_join(TotalLiving %>%
-              filter(Site == "LTER 1"))
+              filter(Site == "LTER 1")) %>%
+  left_join(NEC %>% 
+              group_by(Year,Season, Day_Night)%>% 
+              summarise(mean_NEC = mean(NEC,na.rm = TRUE)) %>%
+              pivot_wider(names_from = Day_Night, values_from = mean_NEC, names_prefix = "NEC_"))
 
 daily_data<-All_PP_data %>%
   group_by(Year, Season, DielDate)%>%
@@ -176,6 +185,46 @@ daily_data<-All_PP_data %>%
   mutate(P_R = abs(daily_GP/daily_R))%>% # average P to average R
   left_join(TotalLiving %>%
               filter(Site == "LTER 1"))
+
+#### yearly averages
+Year_Averages <-All_PP_data %>%
+  mutate(NP = PP,# remove nighttime respiration for average NP
+         R = ifelse(PP<0, PP, NA) # only include night data for R
+  ) %>% 
+  group_by(Year) %>%
+  summarise(NP_mean = mean(NP, na.rm = TRUE),
+            NP_SE = sd(NP, na.rm = TRUE)/sqrt(n()),
+            NP_max = max(NP, na.rm = TRUE),
+            GP_mean = mean(GP, na.rm = TRUE),
+            GP_SE = sd(GP, na.rm = TRUE)/sqrt(n()),
+            R_mean = mean(R, na.rm = TRUE),
+            R_SE = sd(R, na.rm = TRUE)/sqrt(n()),
+            Temperature_mean = mean(Temperature_mean, na.rm = TRUE),
+            Flow_mean = mean(Flow_mean, na.rm = TRUE),
+            PAR_mean = mean(PAR[PAR>0], na.rm = TRUE)
+  ) %>%
+  left_join(TotalLiving %>%
+              filter(Site == "LTER 1")) %>%
+  left_join(NEC %>% 
+              group_by(Year,Day_Night)%>% 
+              summarise(NEC_mean = mean(NEC,na.rm = TRUE),
+                        NEC_SE = sd(NEC, na.rm = TRUE)/sqrt(n())) %>%
+              pivot_wider(names_from = Day_Night, values_from = c(NEC_mean, NEC_SE)))
+
+daily_data<-All_PP_data %>%
+  group_by(Year, Season, DielDate)%>%
+  summarise(daily_GP = mean(GP,na.rm = TRUE),
+            daily_P = mean(PP[PP>0], na.rm = TRUE),
+            daily_R = mean(PP[PP<0], na.rm = TRUE),
+            daily_temp = mean(Temperature_mean, na.rm = TRUE),
+            daily_PAR = mean(PAR[PAR>0], na.rm = TRUE),
+            daily_flow = mean(Flow_mean, na.rm = TRUE),
+            daily_NP = mean(PP, na.rm = TRUE),
+            daily_NP_max = max(PP, na.rm = TRUE)) %>%
+  mutate(P_R = abs(daily_GP/daily_R))%>% # average P to average R
+  left_join(TotalLiving %>%
+              filter(Site == "LTER 1"))
+
 
 
 ## there are a few P/R values that don't make sense, which days are they and why (there are 5 days)
@@ -275,7 +324,30 @@ NP_all<-  Seasonal_Averages %>%
   theme(axis.text.x = element_blank(),
         strip.background = element_blank(),
         strip.text = element_text(size = 14, face = "bold"))
-  
+
+NP_year<-Year_Averages %>%
+  ggplot(aes(x = Year, y = NP_mean*12)) + # * 12 to get the rate in per day
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_smooth(method = "gam",color = "black", alpha = 0.2)+
+  geom_errorbar(aes(ymin = NP_mean*12 - NP_SE*12, ymax =NP_mean*12 + NP_SE*12, color = mean_coral ), 
+                width = 0, linewidth = 2, alpha = 0.2)+
+  geom_point(aes(color = mean_coral))+
+ 
+#  geom_smooth(method = "nls",
+#              formula = y ~ a * x / (b + x) +c,
+#              method.args = list(start = list(a = 450, b = 2020,c = -350)),
+#              se = FALSE,
+#              color = "red",
+#              linewidth = 1.2) +
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  labs(x = "",
+       y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 14, face = "bold"))
+
+
 GP_all<-  Seasonal_Averages %>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
     ggplot(aes(x = Year, y = GP_mean*12))+
@@ -286,6 +358,19 @@ GP_all<-  Seasonal_Averages %>%
   labs(x = "",
        y = expression(atop("Gross production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
     facet_wrap(~Season)+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_blank())
+
+GP_year<- Year_Averages %>%
+  ggplot(aes(x = Year, y = GP_mean*12))+
+  geom_smooth(method = "lm", color = "black", alpha = 0.2)+
+  geom_errorbar(aes(ymin = GP_mean*12 - GP_SE*12, ymax =GP_mean*12 + GP_SE*12, color = mean_coral ), 
+                width = 0, linewidth = 2, alpha = 0.2)+
+  geom_point(aes(color = mean_coral))+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  labs(x = "",
+       y = expression(atop("Gross production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
   theme(strip.text = element_blank(),
         axis.text.x = element_blank())
@@ -303,11 +388,60 @@ R_all<-  Seasonal_Averages %>%
   theme(strip.text = element_blank(),
         axis.text.x = element_text(size = 12))
 
+R_year<- Year_Averages %>%
+  ggplot(aes(x = Year, y = R_mean*12))+
+  geom_smooth(method = "lm", color = "black", alpha = 0.2)+
+  geom_errorbar(aes(ymin = R_mean*12 - R_SE*12, ymax =R_mean*12 + R_SE*12, color = mean_coral ), 
+                width = 0, linewidth = 2, alpha = 0.2)+
+  geom_point(aes(color = mean_coral))+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  labs(x = "",
+       y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_text(size = 12))
+
+NEC_Day_year<- Year_Averages %>%
+  ggplot(aes(x = Year, y = NEC_mean_Day))+
+  geom_hline(yintercept = 0, linetype = 2)+
+  geom_smooth(method = "lm", color = "black", alpha = 0.2)+
+  geom_errorbar(aes(ymin = NEC_mean_Day - NEC_SE_Day, ymax =NEC_mean_Day + NEC_SE_Day, color = mean_coral ), 
+                width = 0, linewidth = 2, alpha = 0.2)+
+  geom_point(aes(color = mean_coral))+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  labs(x = "",
+       y = expression(atop("Day Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_blank())
+
+NEC_Night_year<- Year_Averages %>%
+  ggplot(aes(x = Year, y = NEC_mean_Night))+
+  geom_hline(yintercept = 0, linetype = 2)+
+ # geom_smooth(method = "gam", color = "black", alpha = 0.2)+
+  geom_errorbar(aes(ymin = NEC_mean_Night - NEC_SE_Night, ymax =NEC_mean_Night + NEC_SE_Night, color = mean_coral ), 
+                width = 0, linewidth = 2, alpha = 0.2)+
+  geom_point(aes(color = mean_coral))+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  labs(x = "",
+       y = expression(atop("Night Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(strip.text = element_blank(),
+        axis.text.x = element_text(size = 12))
+
 NP_all/GP_all/R_all&theme(panel.grid.minor = element_blank(),
                           axis.text.y = element_text(size = 12),
-                          axis.title.y = element_text(size = 14))&lims(x = c(2008,2024))
+                          axis.title.y = element_text(size = 14))&lims(x = c(2008,2025))
 
 ggsave(here("Output","SeasonalRates_time.png"), height = 8, width = 6)
+
+
+((NP_year/GP_year/R_year)|(plot_spacer()/NEC_Day_year/NEC_Night_year))+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+                          axis.text.y = element_text(size = 12),
+                          axis.title.y = element_text(size = 14), legend.position = "bottom", legend.title.position = "top")&lims(x = c(2008,2025))
+
+ggsave(here("Output","YearlyRates_time.png"), height = 10, width = 8)
+
 
 Seasonal_Averages %>%
     #filter(Season != "Summer" | !Year %in% c(2009, 2010, 2015) )%>%
@@ -438,6 +572,7 @@ All_PP_data %>%
     mutate(tempc = Temperature_mean,
            Flowmean = Flow_mean,
            cover = mean_alive,
+           coral = mean_coral,
            flow_log = log(Flowmean), # log scal the flow data since it fits in a power function
           # daily_R = -daily_R
            )%>%
@@ -486,7 +621,7 @@ All_PP_data %>%
   fit1_b<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
        nl = TRUE, alpha~1,Pmax~flow_log,
-       Rd~cover)+ student(),
+       Rd~coral)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
     prior = c(
@@ -499,7 +634,7 @@ All_PP_data %>%
   ) 
   
  
-# add in temperature to pmax, Pmax should increase with temperature--- This is taking forever
+# add in temperature to Rd, Rd should increase with temperature--- This is taking forever
   
   fit1_c<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 

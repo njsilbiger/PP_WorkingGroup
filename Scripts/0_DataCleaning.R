@@ -224,7 +224,9 @@ Total_Calc<-Benthic_summary_Algae %>%
 TotalLiving<-Benthic_summary_Algae %>%
   filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae"))%>%
   group_by(Year, Site)%>%
-  summarise(mean_alive = sum(mean_cover))
+  summarise(mean_alive = sum(mean_cover),
+            mean_fleshy = sum(mean_cover[name == "Fleshy Macroalgae"]),
+            mean_coral = sum(mean_cover[name == "Coral"]))
 
 # plot relationship between sst and percent cover of macroproducers
 TotalLiving %>%
@@ -232,10 +234,12 @@ TotalLiving %>%
   left_join(yearly_sst %>% 
               select(-Year)%>%
               rename(Year = Year_Benthic)%>%
-              mutate(Year = Year+1))%>%
+              mutate(Year = Year+1))%>% # 1 year lag
   ggplot(aes(y = mean_alive, x = mean_SST))+
   geom_point()+
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm")+
+  labs(x = "mean SST (1 year lag)",
+       y = "% cover macroproducers")
 
 # Bring together PP and deployment physics data
 PP <- PP %>%
