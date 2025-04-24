@@ -657,7 +657,7 @@ All_PP_data %>%
   fit1_f<-brm(
     bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))-Rd, 
        nl = TRUE, alpha~1,Pmax~flow_log+tempc+cover,
-       Rd~cover+tempc)+ student(),
+       Rd~flow_log+tempc+coral)+ student(),
     data = LTER1_Pnet,
     set_rescor(FALSE),
     prior = c(
@@ -668,6 +668,37 @@ All_PP_data %>%
     chains = 3, seed = 14, iter = 8000, warmup = 2000
     #silent = TRUE
   ) 
+  
+  ## add in the average daily values of flow, temp, cover for the models
+  
+  fit1_f<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))+Rd, 
+       nl = TRUE, alpha~1,Pmax~flow_log+tempc+cover+(1|DielDate),
+       Rd~flow_log+tempc+coral+(1|DielDate))+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+#    prior = c(
+#      prior(normal(0.1,10), nlpar = "alpha", lb = 0) 
+#    ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+    cores = 3, 
+    chains = 3, seed = 13, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+ 
+  test<-ranef(fit1_f)
+  rn<-as_tibble(test)
+  rn<-rownames(rn$DielDate)
+  test<-as_tibble(test[[1]])
+  test<-rn %>% bind_cols(test) %>% rename("DielDate" = `...1`) 
+  test1<-LTER1_Pnet %>% group_by(DielDate)%>% summarise(corals = mean(coral), temp = mean(tempc), flow = mean(Flow_mean), prod = mean(mean_alive), R = mean(R_average), Pmax = max(PP, na.rm = TRUE)) %>% 
+    left_join(test %>% mutate(DielDate = ymd(DielDate)))
+  
+  
+  conditions <- data.frame(DielDate = unique(LTER1_Pnet$DielDate))
+  rownames(conditions) <- unique(LTER1_Pnet$DielDate) 
+  me_year <- conditional_effects(fit1_f, conditions = conditions, re_formula = NULL, method = "predict") 
+  plot(me_year, ncol = 5, points = TRUE)
   
 # testing pmax chaning with cover and flow  
   fit1_e<-brm(
@@ -742,12 +773,26 @@ All_PP_data %>%
 #  pp_check(fit1, resp = "Rd", ndraws = 20)
   
   ### get the predictions for plots
-  Plotdata<-conditional_effects(fit1_d)
+  Plotdata<-conditional_effects(fit1_f)
+
+  
+RawData<- ggplot()+
+  geom_point(data = All_PP_data, aes(x = PAR, y = PP, color = mean_coral), alpha = 0.08)+
+  labs(x = expression(paste("PAR ("~mu~"mol photons m"^-2, " s"^-1,")", sep = "")),
+       y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
+       color = "% Coral Cover")+
+  scale_color_gradient(low = "lightgray", high = "coral")+
+  theme_bw()+
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.8,0.7),
+        legend.box.background = element_blank(),
+        legend.background = element_blank(),
+        legend.title = element_text(hjust = 1))
   
   # PAR vs PP
 P_PAR<-  as_tibble(Plotdata$PAR) %>%
     ggplot(aes(x = PAR, y = estimate__))+
-    #geom_point(data = All_PP_data, aes(x = PAR, y = PP), alpha = 0.05)+
+ #   geom_point(data = All_PP_data, aes(x = PAR, y = PP), alpha = 0.05)+
     geom_line()+
     geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
     labs(x = expression(paste("PAR ("~mu~"mol photons m"^-2, " s"^-1,")", sep = "")),
@@ -783,10 +828,20 @@ P_cover<-  as_tibble(Plotdata$cover) %>%
     labs(x = "% cover of producers",
          y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
     theme_bw()
+
+# Temp vs PP
+P_coral<-  as_tibble(Plotdata$coral) %>%
+  ggplot(aes(x = coral, y = estimate__))+
+  #   geom_point(data = All_PP_data, aes(x = mean_alive, y = PP), alpha = 0.05)+
+  geom_line()+
+  geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "lightblue", alpha = 0.5)+
+  labs(x = "% cover of coral",
+       y = expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
+  theme_bw()
   
 
-(P_PAR + P_flow)/(P_temp+P_cover)  
-ggsave(here("Output","BayesModelFits.png"), width = 8, height = 8)
+((RawData/P_PAR/ P_flow)|(P_temp/P_cover/P_coral))&theme(axis.title = element_text(size = 14), axis.text = element_text(size = 12))  
+ggsave(here("Output","BayesModelFits.png"), width = 8, height = 10)
 ##########################################################
   ### Looking at the raw data with each level of the model
 
@@ -843,7 +898,7 @@ ggsave(here("Output","RawDatafits.png"), height = 8, width = 6)
   # First calculate the mean value for each
   MeanValues<-All_PP_data %>%
   ungroup()%>%
-  select(mean_alive, Flow_mean, Temperature_mean, PAR) %>%
+  select(mean_alive,mean_coral, Flow_mean, Temperature_mean, PAR) %>%
   mutate(PAR = ifelse(PAR==0,NA, PAR)) %>% # only get the data in the light for PAR
   pivot_longer(mean_alive:PAR) %>%
   group_by(name)%>%
@@ -863,13 +918,15 @@ PlusSD<-MeanValues %>%
   mutate(Flow_mean = ifelse(is.na(Flow_mean),MeanParam,Flow_mean),
          PAR = ifelse(is.na(PAR),MeanParam,PAR),
          Temperature_mean = ifelse(is.na(Temperature_mean),MeanParam,Temperature_mean),
+         mean_coral = ifelse(is.na(mean_coral ),MeanParam,mean_coral ),
          mean_alive = ifelse(is.na(mean_alive),MeanParam,mean_alive),
-         ParamChange = c("flow_log","PAR","tempc","cover")
+         ParamChange = c("flow_log","PAR","tempc","cover","coral")
   ) %>%
-  pivot_longer(cols = MeanParam:mean_alive) %>%
+  pivot_longer(cols = MeanParam:mean_coral) %>%
   pivot_wider(names_from = 1, values_from = "value") %>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
-                               name == "mean_alive"~"Cover <br> (27.6%)",
+                               name == "mean_alive"~"Cover <br> (26.6%)",
+                               name == "mean_coral"~"Cover <br> (11.3%)",
                                name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (29.1 °C)",
                                name == "MeanParam" ~"Mean All")
@@ -883,12 +940,14 @@ MinusSD<-MeanValues %>%
          PAR = ifelse(is.na(PAR),MeanParam,PAR),
          Temperature_mean = ifelse(is.na(Temperature_mean),MeanParam,Temperature_mean),
          mean_alive = ifelse(is.na(mean_alive),MeanParam,mean_alive),
-         ParamChange = c("flow_log","PAR","tempc","cover")
+         mean_coral = ifelse(is.na(mean_coral),MeanParam,mean_coral ),
+         ParamChange = c("flow_log","PAR","tempc","cover","coral")
   )  %>%
-  pivot_longer(cols = MeanParam:mean_alive) %>%
+  pivot_longer(cols = MeanParam:mean_coral) %>%
   pivot_wider(names_from = 1, values_from = "value") %>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
-                               name == "mean_alive"~"Cover <br> (11.3%)",
+                               name == "mean_alive"~"Cover <br> (10.2%)",
+                               name == "mean_coral"~"Cover <br> (0.3%)",
                                name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (27.9 °C)",
                                name == "MeanParam" ~"Mean All")
@@ -900,14 +959,14 @@ MinusSD<-MeanValues %>%
 ### put in the fits
 # PlusSD fits
 posteriorpred_CI_plus <- PlusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   median_qi() %>% 
   arrange(.row) %>%
   mutate(group = ifelse(name == "MeanParam","Mean","+1 SD from median"))
 
 # MinusSD fits together with plus
 posteriorpred_CI <- MinusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   median_qi()%>% 
   arrange(.row)%>%
   mutate(group = ifelse(name == "MeanParam","Mean","-1 SD from median")) %>%
@@ -917,33 +976,35 @@ posteriorpred_CI <- MinusSD %>%
 
 # calculate the percent change from the mean with error
 Pluspercent<-PlusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   pivot_wider(names_from = name, values_from = .epred) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
   mutate(group = "+1 SD from median") %>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
                                name == "mean_alive"~"Cover <br> (27.6%)",
+                               name == "mean_coral"~"Coral cover <br> (11.3%)",
                                name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
                         )
 
 Minuspercent<- MinusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   pivot_wider(names_from = name, values_from = .epred) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
   mutate(group = "-1 SD from median")%>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
                                name == "mean_alive"~"Cover <br> (11.3%)",
+                               name == "mean_coral"~"Coral cover <br> (0.3%)",
                                name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
   )
@@ -994,11 +1055,11 @@ ggsave(here("Output","Sensitivityraw.png"), width = 9, height = 6)
 # DO the same thing but for respiration (set light to 0)
 Pluspercent_R<-PlusSD %>%
   mutate(PAR = 0) %>% # only calculate in the dark
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   pivot_wider(names_from = name, values_from = .epred) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
@@ -1006,23 +1067,25 @@ Pluspercent_R<-PlusSD %>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
                                name == "mean_alive"~"Cover <br> (27.6%)",
                                name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
+                               name == "mean_coral"~"Coral cover <br> (11.3%)",
                                name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
          
   )
 
 Minuspercent_R<- MinusSD %>%
   mutate(PAR = 0) %>% # only calculate in the dark
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   pivot_wider(names_from = name, values_from = .epred) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
   mutate(group = "-1 SD from median")%>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
                                name == "mean_alive"~"Cover <br> (11.3%)",
+                               name == "mean_coral"~"Coral cover <br> (0.3%)",
                                name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
   )
@@ -1050,7 +1113,7 @@ ggsave(here("Output","Sensitivity_R.png"), width = 9, height = 6)
 # PlusSD fits
 posteriorpred_CI_plusR <- PlusSD %>%
   mutate(PAR = 0)%>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   median_qi() %>% 
   arrange(.row) %>%
   mutate(group = ifelse(name == "MeanParam","Mean","+1 SD from median"))
@@ -1058,7 +1121,7 @@ posteriorpred_CI_plusR <- PlusSD %>%
 # MinusSD fits together with plus
 posteriorpred_CI_R <- MinusSD %>%
   mutate(PAR = 0)%>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   median_qi()%>% 
   arrange(.row)%>%
   mutate(group = ifelse(name == "MeanParam","Mean","-1 SD from median")) %>%
@@ -1090,47 +1153,49 @@ posteriorpred_CI_R %>%
 # First I take the draws for NP and then I join them with the draws for R and add them together
 
 MinusPercent_GP<-MinusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   left_join(MinusSD %>%
               mutate(PAR = 0)%>% # the respiration draws
-              add_epred_draws(fit1_d) %>%
+              add_epred_draws(fit1_f) %>%
               ungroup()%>%
               select(name, .epred_R = .epred, .draw)) %>%
   mutate(.epred_GP = .epred - .epred_R) %>%
   select(-c(.epred,.epred_R))%>%
   pivot_wider(names_from = name, values_from = .epred_GP) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
   mutate(group = "-1 SD from median")%>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.07 m s<sup>-1</sup>)",
+                               name == "mean_coral"~"Coral cover <br> (0.3%)",
                                name == "mean_alive"~"Cover <br> (11.3%)",
                                name == "PAR" ~ "PAR <br> (124 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (27.9 °C)")
   )
 
 PlusPercent_GP<-PlusSD %>%
-  add_epred_draws(fit1_d) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup()%>%
   select(name, .epred, .draw) %>%
   left_join(MinusSD %>%
               mutate(PAR = 0)%>% # the respiration draws
-              add_epred_draws(fit1_d) %>%
+              add_epred_draws(fit1_f) %>%
               ungroup()%>%
               select(name, .epred_R = .epred, .draw)) %>%
   mutate(.epred_GP = .epred - .epred_R) %>%
   select(-c(.epred,.epred_R))%>%
   pivot_wider(names_from = name, values_from = .epred_GP) %>%
-  pivot_longer(cols = Flow_mean:mean_alive) %>%
+  pivot_longer(cols = Flow_mean:mean_coral) %>%
   mutate(percentchange = 100*(value-MeanParam)/MeanParam) %>%
   group_by(name)%>%
   median_qi(percentchange) %>%
   mutate(group = "+1 SD from median") %>%
   mutate(Nicenames = case_when(name == "Flow_mean" ~ "Flow <br> (0.2 m s<sup>-1</sup>)",
                                name == "mean_alive"~"Cover <br> (27.6%)",
+                               name == "mean_coral"~"Coral cover <br> (11.3%)",
                                name == "PAR" ~ "PAR <br> (1253 &mu;mol photon s<sup>-1</sup>)",
                                name == "Temperature_mean"~"Temperature <br> (29.1 °C)")
   )
@@ -1155,21 +1220,21 @@ GP_percent<-MinusPercent_GP %>%
 #####################
 ## plot observed versus predicted values
 
-predicted<-predict(fit1_d, newdata = LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover)) %>%
-  bind_cols(LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover, Year, Season))
+predicted<-predict(fit1_f, newdata = LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, coral, cover)) %>%
+  bind_cols(LTER1_Pnet %>% select(PP,flow_log, PAR, tempc, cover,coral, Year, Season))
 
 # plot the relationship between cover and Respiration with the model fits
 Resp_predictions<-LTER1_Pnet %>% 
-  select(PP,flow_log, PAR, tempc, cover, Year, Season) %>%
-  add_epred_draws(fit1_d) %>%
+  select(PP,flow_log, PAR, tempc, cover,coral, Year, Season) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup() %>%
   filter(.epred<0) %>%
-  group_by(Year, Season, cover) %>%
-  median_qi(.epred, PP, tempc) 
+  group_by(Year, Season, coral) %>%
+  median_qi(.epred, PP, tempc, flow_log) 
 
 Resp_predictions %>%
-  arrange(cover)%>%
-  ggplot(aes(x = cover, y = .epred))+
+  arrange(coral)%>%
+  ggplot(aes(x = coral, y = .epred))+
   #geom_point()+
   geom_point()+
   geom_smooth(method = "lm")
@@ -1180,9 +1245,16 @@ Resp_predictions %>%
   geom_point()+
   geom_smooth(method = "lm")
 
+Resp_predictions %>%
+  ggplot(aes(x = flow_log, y = PP))+
+  #geom_point()+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+
 P_predictions<-LTER1_Pnet %>% 
-  select(PP,flow_log, PAR, tempc, cover, Year, Season) %>%
-  add_epred_draws(fit1_d) %>%
+  select(PP,flow_log, PAR, tempc, cover,coral, Year, Season) %>%
+  add_epred_draws(fit1_f) %>%
   ungroup() %>%
   filter(.epred>0) %>%
   select(tempc,flow_log, .epred, PP, Season, Year) %>%
@@ -1193,6 +1265,7 @@ P_predictions<-LTER1_Pnet %>%
             mean_flow = mean(flow_log, na.rm = TRUE))
 
 
+
 P_predictions %>%
   ggplot(aes(x = exp(mean_flow), y = epred_max))+
   geom_point()+
@@ -1200,7 +1273,7 @@ P_predictions %>%
   theme_bw()
 
 
-# calculate a psuedo-R2 (currently 0.784)
+# calculate a psuedo-R2 (currently 0.813)
 predicted %>%
   mutate(residual = PP-Estimate) %>%
   reframe(SSR = sum(residual^2),
@@ -1214,13 +1287,13 @@ OP_plot<-predicted %>%
   labs(x = expression(paste("Observed NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
        y = expression(paste("Predicted NEP (mmol O"[2]," m"^-2, " hr"^-1,")")))+
   geom_abline(slope = 1, linewidth = 1, color = "blue")+
-  annotate("text", x = -25, y = 150, label = expression(paste("R"^2,"=0.78")))+
+  annotate("text", x = -25, y = 150, label = expression(paste("R"^2,"=0.81")))+
   xlim(-100, 200)+
   ylim(-100,200)+
   theme_classic()
 
 # posterior predictive checks
-PP_plot<-pp_check(fit1_d)+
+PP_plot<-pp_check(fit1_f)+
   labs(x =  expression(paste("NEP (mmol O"[2]," m"^-2, " hr"^-1,")")),
        y = "Density")+
   theme_classic()
