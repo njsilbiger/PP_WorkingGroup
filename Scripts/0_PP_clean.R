@@ -686,7 +686,154 @@ All_PP_data %>%
     #silent = TRUE
   ) 
  
-  test<-ranef(fit1_f)
+
+  LTER1_Pnet <-LTER1_Pnet %>%
+    mutate(UPDN = as.factor(UPDN),
+           Year = as.factor(Year))
+  
+  fit1_f<-brm(
+    bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))+Rd, 
+       nl = TRUE, alpha~0+Year,Pmax~0+Year,
+       Rd~0+Year)+ student(),
+    data = LTER1_Pnet,
+    set_rescor(FALSE),
+        prior = c(
+          prior(normal(0.1,10), nlpar = "alpha", lb = 0),
+          prior(normal(-100,10), nlpar = "Rd", ub = 0), 
+          prior(normal(100,10), nlpar = "Pmax", lb = 0) 
+        ), 
+    control = list(adapt_delta = 0.95, max_treedepth = 20), 
+    cores = 3, 
+    chains = 3, seed = 223, iter = 8000, warmup = 2000
+    #silent = TRUE
+  ) 
+  
+  
+  names<-rownames(fixef(fit1_f))
+  
+  coefficients<-as_tibble(fixef(fit1_f)) %>%
+    mutate(params = names)
+  
+  coefficients %>%
+    separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
+    filter(param_type == "Pmax") %>%
+    separate(yearname, sep = "r", into = c("y","year")) %>%
+    mutate(year = as.numeric(year)) %>%
+    ggplot(aes(x = year, y = Estimate))+
+    geom_point()
+
+  Pmax_coefs<-coefficients %>%
+    separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
+    filter(param_type == "Pmax") %>%
+    separate(yearname, sep = "r", into = c("y","Year")) %>%
+    mutate(Year = as.numeric(Year)) %>%
+    left_join(Year_Averages) 
+
+  Pmax_coefs %>%
+    ggplot(aes(x = mean_alive, y = Estimate))+
+    geom_point()+
+    geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0)+
+    coord_trans(x = "log")+
+    geom_smooth(method = "lm")+
+    labs(x = "coral cover",
+         y = "Predicted Pmax")
+    
+Pmaxyear<-  Pmax_coefs %>%
+    ggplot(aes(x = Year, y = Estimate))+
+    geom_point()+
+    geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0)+
+  #  coord_trans(x = "log")+
+    geom_smooth(method = "lm")+
+    labs(x = "Year",
+         y = "Predicted Pmax")+
+  theme_bw()
+  
+  Resp_coefs<-coefficients %>%
+    separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
+    filter(param_type == "Rd") %>%
+    separate(yearname, sep = "r", into = c("y","Year")) %>%
+    mutate(Year = as.numeric(Year)) %>%
+    left_join(Year_Averages) 
+ 
+ Resp_coefs %>%
+    ggplot(aes(x = R_mean, y = Estimate))+
+    geom_point()+
+    geom_errorbar(aes(x = R_mean, ymin = Q2.5, ymax = Q97.5), width = 0)+
+   geom_errorbarh(aes(xmin = R_mean-R_SE, xmax = R_mean+R_SE), width = 0)+
+    #coord_trans(x = "log")+
+    geom_smooth(method = "lm")+
+    labs(x = "Measured R",
+         y = "Predicted R")  
+ 
+  Resp_coefs %>%
+    ggplot(aes(x = mean_coral, y = -Estimate))+
+    geom_point()+
+    geom_errorbar(aes(x = mean_coral, ymin = -Q2.5, ymax = -Q97.5), width = 0)+
+    coord_trans(x = "log")+
+    geom_smooth(method = "lm")+
+    labs(x = "coral cover",
+         y = "Predicted R")
+  
+    Resp_coefs %>%
+    ggplot(aes(x = Temperature_mean, y = Estimate))+
+    geom_point()+
+    geom_errorbar(aes( ymin = Q2.5, ymax = Q97.5), width = 0)+
+   # coord_trans(x = "log")+
+  #  geom_smooth(method = "lm")+
+    labs(x = "coral cover",
+         y = "Predicted R")
+    
+Respyear<-Resp_coefs %>%
+      ggplot(aes(x = Year, y = -Estimate))+
+      geom_point()+
+      geom_errorbar(aes( ymin = -Q2.5, ymax = -Q97.5), width = 0)+
+      # coord_trans(x = "log")+
+        geom_smooth(method = "lm")+
+      labs(x = "Year",
+           y = "Predicted R")+
+  theme_bw()
+
+alpha_coefs<-coefficients %>%
+      separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
+      filter(param_type == "alpha") %>%
+      separate(yearname, sep = "r", into = c("y","Year")) %>%
+      mutate(Year = as.numeric(Year)) %>%
+      left_join(Year_Averages)   
+    
+alphayear<-  alpha_coefs%>%
+     # filter(!Year %in% c(2011,2021))%>%
+      ggplot(aes(x = Year, y = Estimate))+
+      geom_point()+
+      geom_errorbar(aes( ymin = Q2.5, ymax = Q97.5), width = 0)+
+      # coord_trans(x = "log")+
+        geom_smooth(method = "lm")+
+      labs(x = "Year",
+           y = "Predicted alpha")+
+  theme_bw()
+  
+Pmaxyear/Respyear/alphayear
+
+Resp_coefs %>%
+  select(Year, resp_effect = Estimate)
+
+# get the conditional effects to make a plots
+ ce<- conditional_effects(fit1_f, effects = "PAR")
+ ce<-as_tibble(ce$PAR)
+
+ggplot()+
+  geom_ribbon(data = ce, aes(x = PAR, ymin = lower__, ymax = upper__), alpha = 0.75, fill = "lightblue")+
+  geom_line(data = ce, aes(x = PAR, y = estimate__), linewidth = 1)+
+  geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
+             inherit.aes=FALSE, alpha=0.05)+
+  labs(y = "Net Ecosystem Production")+
+  theme_bw()
+
+ggplot()+
+geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
+           inherit.aes=FALSE, alpha=0.05)+
+  facet_wrap(~Year)
+        
+test<-ranef(fit1_f)
   rn<-as_tibble(test)
   rn<-rownames(rn$DielDate)
   test<-as_tibble(test[[1]])
