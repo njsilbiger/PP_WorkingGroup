@@ -740,12 +740,13 @@ All_PP_data %>%
     
 Pmaxyear<-  Pmax_coefs %>%
     ggplot(aes(x = Year, y = Estimate))+
+    geom_errorbar(aes( ymin = Q2.5, ymax = Q97.5, color = mean_coral), width = 0, linewidth = 2, alpha = 0.5)+
     geom_point()+
-    geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0)+
   #  coord_trans(x = "log")+
-    geom_smooth(method = "lm")+
-    labs(x = "Year",
-         y = "Predicted Pmax")+
+    geom_smooth(method = "lm", color = "black")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+      labs(x = "Year",
+           y = expression(atop("Maximum Photosynthetic Capacity",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
   
   Resp_coefs<-coefficients %>%
@@ -785,12 +786,13 @@ Pmaxyear<-  Pmax_coefs %>%
     
 Respyear<-Resp_coefs %>%
       ggplot(aes(x = Year, y = -Estimate))+
+      geom_errorbar(aes( ymin = -Q2.5, ymax = -Q97.5, color = mean_coral), width = 0, linewidth = 2, alpha = 0.5)+
       geom_point()+
-      geom_errorbar(aes( ymin = -Q2.5, ymax = -Q97.5), width = 0)+
       # coord_trans(x = "log")+
-        geom_smooth(method = "lm")+
-      labs(x = "Year",
-           y = "Predicted R")+
+        geom_smooth(method = "lm", color = "black")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+        labs(x = "Year",
+           y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
 
 alpha_coefs<-coefficients %>%
@@ -811,10 +813,12 @@ alphayear<-  alpha_coefs%>%
            y = "Predicted alpha")+
   theme_bw()
   
-Pmaxyear/Respyear/alphayear
+(Pmaxyear|NEC_Day_year)/(Respyear|NEC_Night_year)+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+                                                                                        axis.text.y = element_text(size = 12),
+                                                                                        axis.title.y = element_text(size = 14), legend.position = "bottom", legend.title.position = "top")&lims(x = c(2008,2025))
 
-Resp_coefs %>%
-  select(Year, resp_effect = Estimate)
+
+ggsave(here("Output","Yearly_rates_modelpreds.pdf"), width = 8, height = 8)
 
 # get the conditional effects to make a plots
  ce<- conditional_effects(fit1_f, effects = "PAR")
@@ -825,14 +829,233 @@ ggplot()+
   geom_line(data = ce, aes(x = PAR, y = estimate__), linewidth = 1)+
   geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
              inherit.aes=FALSE, alpha=0.05)+
-  labs(y = "Net Ecosystem Production")+
-  theme_bw()
+  labs( x = expression(atop("Photosynthetic active radiation",paste("(",~mu~"mol photons", " m"^-2, " s"^-1,")"))),
+        y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+
+ggsave(here("Output","PIcurve.pdf"), width = 6, height = 6)
 
 ggplot()+
 geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
            inherit.aes=FALSE, alpha=0.05)+
   facet_wrap(~Year)
+
+
+
+
+
+
+############## Model the coefs ~ of temperature, cover, and flow ###########
+
+
+Allcoefs<-Resp_coefs %>%
+  select(Year, resp_effect = Estimate, resp2.5 = Q2.5, resp97.5 = Q97.5) %>%
+  left_join(Pmax_coefs%>%
+              select(Year, pmax_effect = Estimate, pmax2.5 = Q2.5, pmax97.5 = Q97.5)) %>%
+  left_join(Year_Averages)
+
+
+PredictionData<-Allcoefs %>%
+  select(resp_effect, pmax_effect, Temperature_mean, Flow_mean, PAR_mean, mean_coral, NEC_mean_Day, NEC_mean_Night) %>%
+  mutate(resp_effect = -resp_effect) %>% # make respiration positive 
+  mutate(mean_coral = log(mean_coral))%>% # log transform the coral cover data
+  mutate_at(vars(resp_effect:NEC_mean_Night), .funs = scale) %>%
+  mutate_all(.funs = as.numeric)
+
+mod_predictions_r<-brm(resp_effect~Temperature_mean+Flow_mean+ mean_coral, data =PredictionData )
+
+
+## standardized coef plot for Respiration
+Plot_rcoef<-fixef(mod_predictions_r) %>%
+  as_tibble() %>%
+  mutate(params = rownames(fixef(mod_predictions_r))) %>%
+  filter(params != "Intercept") %>%
+  mutate(nicenames = case_when(params == "Temperature_mean" ~"Temperature",
+                               params == "mean_coral"~ "Coral Cover",
+                               params == "Flow_mean"~ "Current Speed"))%>%
+  mutate(sig = ifelse(params == "mean_coral",1, 0.75))%>%
+  ggplot()+
+  geom_vline(xintercept = 0, linetype = 2)+
+  geom_point(aes(x = Estimate, y = nicenames, alpha = sig), size = 3)+
+  geom_errorbarh(aes(xmin = Q2.5,xmax = Q97.5, y = nicenames, alpha = sig), height = 0)+
+  scale_alpha(range = c(0.35,1))+
+  labs(x = expression(atop("Standardized effect size","Respiration")),
+       y = "")+
+  theme_bw()+
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank())
+
+## Make the coral plot on coral scale since it is the only significant one
+mod_predictions_r<-brm(Estimate~Temperature_mean+Flow_mean+ log(mean_coral), data =Resp_coefs)
+
+ce_r<- conditional_effects(mod_predictions_r)[[3]] 
+
+resp_coral<-ce_r %>%
+  ggplot()+
+  geom_point(data = Resp_coefs, aes(x = mean_coral, y = -Estimate), inherit.aes = FALSE)+
+  geom_ribbon(aes(x = mean_coral, ymin = -lower__, ymax = -upper__), alpha = 0.5, fill = "coral")+
+  geom_line(aes(x = mean_coral, y = -estimate__))+
+  labs(x = "Coral Cover (%)",
+       y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())
+  
+
+# photosynthesis
+mod_predictions_p<-brm(pmax_effect~Temperature_mean+Flow_mean+ mean_coral, data =PredictionData )
+
+## standardized coef plot for Pmax
+Plot_pcoef<-fixef(mod_predictions_p) %>%
+  as_tibble() %>%
+  mutate(params = rownames(fixef(mod_predictions_p))) %>%
+  filter(params != "Intercept") %>%
+  mutate(nicenames = case_when(params == "Temperature_mean" ~"Temperature",
+                               params == "mean_coral"~ "Coral Cover",
+                               params == "Flow_mean"~ "Current Speed"))%>%
+  ggplot()+
+  geom_vline(xintercept = 0, linetype = 2)+
+  geom_point(aes(x = Estimate, y = nicenames), size = 3)+
+  geom_errorbarh(aes(xmin = Q2.5,xmax = Q97.5, y = nicenames), height = 0)+
+  labs(x = expression(atop("Standardized effect size","Pmax")),
+       y = "")+
+  theme_bw()
+
         
+# NEC
+mod_predictions_NEC<-brm(NEC_mean_Day~Temperature_mean+Flow_mean+ mean_coral, data =PredictionData )
+
+## standardized coef plot for Pmax
+Plot_neccoef<-fixef(mod_predictions_NEC) %>%
+  as_tibble() %>%
+  mutate(params = rownames(fixef(mod_predictions_NEC))) %>%
+  filter(params != "Intercept") %>%
+  mutate(nicenames = case_when(params == "Temperature_mean" ~"Temperature",
+                               params == "mean_coral"~ "Coral Cover",
+                               params == "Flow_mean"~ "Current Speed"))%>%
+  ggplot()+
+  geom_vline(xintercept = 0, linetype = 2)+
+  geom_point(aes(x = Estimate, y = nicenames), size = 3)+
+  geom_errorbarh(aes(xmin = Q2.5,xmax = Q97.5, y = nicenames), height = 0)+
+  labs(x = expression(atop("Standardized effect size","Daytime Net Ecosystem Calcification")),
+       y = "")+
+  theme_bw()
+
+
+# NEC Night
+mod_predictions_NEC_Night<-brm(NEC_mean_Night~Temperature_mean+Flow_mean+ mean_coral, data =PredictionData )
+
+## standardized coef plot for NEC Night
+Plot_necnightcoef<-fixef(mod_predictions_NEC_Night) %>%
+  as_tibble() %>%
+  mutate(params = rownames(fixef(mod_predictions_NEC_Night))) %>%
+  filter(params != "Intercept") %>%
+  mutate(nicenames = case_when(params == "Temperature_mean" ~"Temperature",
+                               params == "mean_coral"~ "Coral Cover",
+                               params == "Flow_mean"~ "Current Speed"))%>%
+  ggplot()+
+  geom_vline(xintercept = 0, linetype = 2)+
+  geom_point(aes(x = Estimate, y = nicenames), size = 3)+
+  geom_errorbarh(aes(xmin = Q2.5,xmax = Q97.5, y = nicenames), height = 0)+
+  labs(x = expression(atop("Standardized effect size","Nighttime Net Ecosystem Calcification")),
+       y = "")+
+  theme_bw()
+
+resp_coral |Plot_rcoef
+ggsave(here("Output","Resp_coral.pdf"), width = 8, height = 4)
+
+
+  ((Plot_rcoef|Plot_pcoef)/(Plot_neccoef|Plot_necnightcoef))
+
+#################################################
+# Do it for every season
+LTER1_Pnet <-LTER1_Pnet %>%
+  mutate(DielDatefactor = as.factor(DielDate))
+
+fit1_g<-brm(
+  bf(PP ~ ((alpha*Pmax*PAR)/(alpha*PAR+Pmax))+Rd, 
+     nl = TRUE, alpha~0+UPDN,Pmax~0+UPDN,
+     Rd~0+UPDN)+ student(),
+  data = LTER1_Pnet,
+  set_rescor(FALSE),
+  prior = c(
+    prior(normal(0.1,10), nlpar = "alpha", lb = 0),
+    prior(normal(-100,10), nlpar = "Rd", ub = 0),
+    prior(normal(100,10), nlpar = "Pmax", lb = 0)
+  ),
+  control = list(adapt_delta = 0.95, max_treedepth = 20), 
+  cores = 3, 
+  chains = 3, seed = 223, iter = 8000, warmup = 2000
+  #silent = TRUE
+) 
+
+
+
+names<-rownames(fixef(fit1_g))
+
+coefficients_UPDN<-as_tibble(fixef(fit1_g)) %>%
+  mutate(params = names)
+
+# get the year and season for UPDN
+meta_UPDN <-All_PP_data %>%
+  ungroup() %>% 
+  select(UPDN, Year, Season) %>% 
+  distinct()
+
+Pmax_coefs_season<-coefficients_UPDN %>%
+  separate(params, sep = "_",into = c("param_type","UPDNname"), remove = FALSE) %>%
+  filter(param_type == "Pmax") %>%
+  separate(UPDNname, sep = "N", into = c("y","UPDN")) %>%
+  mutate(UPDN = as.numeric(UPDN)) %>%
+  left_join(meta_UPDN) %>%
+  left_join(Seasonal_Averages)
+
+Pmax_coefs_season %>%
+  ggplot(aes(y = NEC_Day, x = Estimate))+
+  geom_point()+
+ # coord_trans(x = "log")+
+  geom_smooth(method = "lm")
+  #geom_errorbarh(aes(xmin = Q2.5, xmax = Q97.5), width = 0)
+
+Pmax_coefs_season %>%
+  ggplot(aes(x = mean_coral , y = NEC_Day))+
+  geom_point()+
+  # coord_trans(x = "log")+
+  geom_smooth(method = "lm")
+
+R_coefs_season<-coefficients_UPDN %>%
+  separate(params, sep = "_",into = c("param_type","UPDNname"), remove = FALSE) %>%
+  filter(param_type == "Rd") %>%
+  separate(UPDNname, sep = "N", into = c("y","UPDN")) %>%
+  mutate(UPDN = as.numeric(UPDN)) %>%
+  left_join(meta_UPDN) %>%
+  left_join(Seasonal_Averages)
+
+R_coefs_season %>%
+  ggplot(aes(x = Flow_mean, y = Estimate))+
+  geom_point()+
+  #coord_trans(x = "log")+
+  geom_smooth(method = "lm")+
+  geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0)
+
+Alpha_coefs_season<-coefficients_UPDN %>%
+  separate(params, sep = "_",into = c("param_type","UPDNname"), remove = FALSE) %>%
+  filter(param_type == "alpha") %>%
+  separate(UPDNname, sep = "N", into = c("y","UPDN")) %>%
+  mutate(UPDN = as.numeric(UPDN)) %>%
+  left_join(meta_UPDN) %>%
+  left_join(Seasonal_Averages)
+
+Alpha_coefs_season %>%
+  filter(Estimate<2)%>%
+  ggplot(aes(x = Year, y = Estimate))+
+  geom_point()+
+  #coord_trans(x = "log")+
+  geom_smooth(method = "lm")+
+  geom_errorbar(aes(ymin = Q2.5, ymax = Q97.5), width = 0)
+
+
+#############################################################
 test<-ranef(fit1_f)
   rn<-as_tibble(test)
   rn<-rownames(rn$DielDate)
