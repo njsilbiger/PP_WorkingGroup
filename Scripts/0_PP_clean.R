@@ -1827,3 +1827,4 @@ Allcoefs %>%
   theme_bw()+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
+ggsave(here("Output","ER_Pmax.pdf"), width = 5, height = 5)
