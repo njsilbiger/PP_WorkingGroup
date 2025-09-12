@@ -109,14 +109,15 @@ LTER1_cover<-Benthic_summary_Algae %>%
   geom_point(size = 2)+
   geom_line(size = 1)+
   scale_color_manual(values = c("#CC7161","lightpink","darkgreen"))+
-  geom_text(data = tibble(Year = c(2007, 2017, 2014.5), 
+  geom_text(data = tibble(Year = c(2007, 2017, 2015), 
                           name = c("Coral","Crustose Corallines","Fleshy Macroalgae"), 
                           mean_cover = c(33,20,0)),
             aes(x = Year, y = mean_cover, label = name))+
   labs(x = "",
        y = "Cover (%)",
        color = "",
-       title = "LTER 1 only")+
+       #title = "LTER 1 only"
+       )+
   scale_y_continuous(limits = c(0,40))+
   # scale_x_continuous(limits = c(2008, 2025))+
   theme_bw()+
@@ -126,7 +127,7 @@ LTER1_cover<-Benthic_summary_Algae %>%
         legend.position = "none",
         #    legend.background = element_blank(),
         legend.text = element_text(size = 12),
-        axis.text.x = element_blank(),
+      #  axis.text.x = element_blank(),
         panel.grid.minor = element_blank())
 
 All_cover<-Benthic_summary_Algae %>%
@@ -211,7 +212,7 @@ All_coverliving<-Benthic_summary_Algae %>%
         axis.text.y = element_blank(),
         panel.grid.minor = element_blank())
 
-(LTER1_cover|All_cover+ theme(legend.position = "none")+ plot_layout(guides = "collect"))/(LTER1_coverliving+All_coverliving)
+((LTER1_cover|All_cover+ theme(legend.position = "none")+ plot_layout(guides = "collect"))/(LTER1_coverliving+All_coverliving))+plot_layout(axes = "collect")
 ggsave(here("Output","AllCoverData.pdf"), width = 8, height = 8)
 
 ## Calculate the total percent of calcifiers
@@ -292,3 +293,8 @@ ggsave(here("Output","TempYear.pdf"), width = 5, height = 6)
 
 ## remove what I dont need ###
 rm(Total_Calc, TotalLiving, BenthicCover_Algae, Benthic_summary_Algae)
+
+
+((LTER1_cover/LTER1_coverliving/SST_plot)&theme(panel.grid.minor = element_blank(),
+                                               axis.text.x = element_text(size = 12)))+plot_layout(axes = "collect")
+ggsave(here("Output","Year_coral_SST.pdf"), height = 10, width = 5)

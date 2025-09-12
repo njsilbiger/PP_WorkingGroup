@@ -32,7 +32,7 @@ OISST_sub_dl <- function(time_df){
 dl_years <- data.frame(date_index = 1:2,
                        start = c("2006-01-01", "2014-01-01" 
                                  ),
-                       end = c("2015-12-31", "2024-11-28"))
+                       end = c("2015-12-31", "2025-08-01"))
 
 # Download all of the data with one nested request
 # The time this takes will vary greatly based on connection speed
@@ -79,14 +79,16 @@ SST_year<-OISST_data %>%
   mutate(Year_Benthic = Year + 1) # the benthic data should be last years temperature driving the change
 
 
-SST_year %>%
+SST_plot<-SST_year %>%
   ggplot(aes(x = Year, y = mean_SST))+
   geom_point()+
-  geom_smooth(method = "lm")+
+  geom_smooth(method = "lm", color = "black")+
   labs(x = "Year",
-       y = "Mean SST ("~degree~"C)")+
-  theme_bw()
-ggsave(here("Output","YearlySST.png"), width = 6, height = 6)
+       y = "Mean Annual SST ("~degree~"C)")+
+  theme_bw()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size =14))
+ggsave(here("Output","YearlySST.pdf"), width = 6, height = 6)
 
 write_csv(SST_year, here("Data","SST_year.csv"))
 
