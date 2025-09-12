@@ -267,9 +267,9 @@ std.data<-daily_data %>%
 
 
 Seasonal_Averages %>%
-  ggplot(aes(x = Year, y = GP_mean ))+
+  ggplot(aes(x = Year, y = GP_mean*24 ))+
   geom_point()+
-  geom_errorbar(aes(ymin = GP_mean - GP_SE, ymax = GP_mean+GP_SE))+
+  geom_errorbar(aes(ymin = GP_mean*24 - GP_SE*24, ymax = GP_mean*24+GP_SE*24))+
   geom_smooth(method = "lm")
 
 daily_data %>%
@@ -1017,7 +1017,7 @@ resp_coral<-ce_r %>%
   geom_ribbon(aes(x = mean_coral, ymin = -lower__, ymax = -upper__), alpha = 0.5, fill = "coral")+
   geom_line(aes(x = mean_coral, y = -estimate__))+
   labs(x = "Coral Cover (%)",
-       y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+       y = expression(atop("Ecosystem Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
   theme(panel.grid.minor = element_blank())
   
@@ -1828,3 +1828,15 @@ Allcoefs %>%
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 ggsave(here("Output","ER_Pmax.pdf"), width = 5, height = 5)
+
+
+Seasonal_Averages %>% ggplot(aes(x = GP_mean*24, y = NEC_Day))+
+  geom_point()+
+  geom_smooth(method = "lm", color = "black")+
+  labs(x = expression(atop("Gross Photosynthesis",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))),
+       y = expression(atop("Net Ecosystem Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+ggsave(here("Output","GP_NEC.pdf"), width = 5, height = 5)
