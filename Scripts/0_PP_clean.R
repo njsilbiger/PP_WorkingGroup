@@ -339,7 +339,9 @@ NP_year<-Year_Averages %>%
 #              se = FALSE,
 #              color = "red",
 #              linewidth = 1.2) +
-  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
   labs(x = "",
        y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
@@ -408,7 +410,9 @@ NEC_Day_year<- Year_Averages %>%
   geom_errorbar(aes(ymin = NEC_mean_Day - NEC_SE_Day, ymax =NEC_mean_Day + NEC_SE_Day, color = mean_coral ), 
                 width = 0, linewidth = 2, alpha = 0.2)+
   geom_point(aes(color = mean_coral))+
-  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
   labs(x = "",
        y = expression(atop("Day Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
@@ -422,7 +426,9 @@ NEC_Night_year<- Year_Averages %>%
   geom_errorbar(aes(ymin = NEC_mean_Night - NEC_SE_Night, ymax =NEC_mean_Night + NEC_SE_Night, color = mean_coral ), 
                 width = 0, linewidth = 2, alpha = 0.2)+
   geom_point(aes(color = mean_coral))+
-  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
   labs(x = "",
        y = expression(atop("Night Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
@@ -744,10 +750,15 @@ Pmaxyear<-  Pmax_coefs %>%
     geom_point()+
   #  coord_trans(x = "log")+
     geom_smooth(method = "lm", color = "black")+
-  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
       labs(x = "Year",
            y = expression(atop("Maximum Photosynthetic Capacity",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
+
+# how much does Pmax change by year
+Pmax_model_year<-brm(Estimate|se(Est.Error)~Year, data = Pmax_coefs) # keeping the error propagated (obervation level standard error)
   
   Resp_coefs<-coefficients %>%
     separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
@@ -760,11 +771,14 @@ Pmaxyear<-  Pmax_coefs %>%
     ggplot(aes(x = R_mean, y = Estimate))+
     geom_point()+
     geom_errorbar(aes(x = R_mean, ymin = Q2.5, ymax = Q97.5), width = 0)+
-   geom_errorbarh(aes(xmin = R_mean-R_SE, xmax = R_mean+R_SE), width = 0)+
+   geom_errorbarh(aes(xmin = R_mean-R_SE, xmax = R_mean+R_SE), height = 0)+
     #coord_trans(x = "log")+
     geom_smooth(method = "lm")+
-    labs(x = "Measured R",
-         y = "Predicted R")  
+ #   geom_abline(a = 1, b = 0)+
+    labs(x =  expression(atop("Measured Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))),
+         y = expression(atop("Predicted Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+   theme_bw()
+ ggsave(here("Output","MeasuredVsPredictedR.pdf"), width = 4, height = 4)
  
   Resp_coefs %>%
     ggplot(aes(x = mean_coral, y = -Estimate))+
@@ -790,10 +804,16 @@ Respyear<-Resp_coefs %>%
       geom_point()+
       # coord_trans(x = "log")+
         geom_smooth(method = "lm", color = "black")+
-  scale_color_viridis(option = "rocket", name = "% Coral Cover")+
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
         labs(x = "Year",
-           y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+           y = expression(atop("Ecosystem Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()
+
+
+# how much does Rd change by year
+Rd_model_year<-brm(-Estimate|se(Est.Error)~Year, data = Resp_coefs) # keeping the error propagated (obervation level standard error)
 
 alpha_coefs<-coefficients %>%
       separate(params, sep = "_",into = c("param_type","yearname"), remove = FALSE) %>%
@@ -812,29 +832,129 @@ alphayear<-  alpha_coefs%>%
       labs(x = "Year",
            y = "Predicted alpha")+
   theme_bw()
-  
-(Pmaxyear|NEC_Day_year)/(Respyear|NEC_Night_year)+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
-                                                                                        axis.text.y = element_text(size = 12),
-                                                                                        axis.title.y = element_text(size = 14), legend.position = "bottom", legend.title.position = "top")&lims(x = c(2008,2025))
+
+## How much does NP change from Year to year using the average data and SE
+NP_model_year<-brm(NP_mean|se(NP_SE)~poly(Year,2), 
+                   data = Year_Averages,  family = gaussian()) # keeping the error propagated (observation level standard error)
 
 
-ggsave(here("Output","Yearly_rates_modelpreds.pdf"), width = 8, height = 8)
+## How much does Day calc change from Year to year using the average data and SE
+NEC_model_year<-brm(NEC_mean_Day|se(NEC_SE_Day)~Year, data = Year_Averages) # keeping the error
+draws_NEC_total<-NEC_model_year %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+NEC_density<-density(draws_NEC_total$b_Year)
+plotdata_NEC_total<-as_tibble(bind_cols(x = NEC_density$x, y=NEC_density$y)) %>%
+  mutate(param = "NEC Day")
+
+
+NEC_model_year_Night<-brm(NEC_mean_Night|se(NEC_SE_Night)~Year, data = Year_Averages) # keeping the error 
+draws_NEC_total_Night<-NEC_model_year_Night %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+NEC_density_Night<-density(draws_NEC_total_Night$b_Year)
+plotdata_NEC_total_Night<-as_tibble(bind_cols(x = NEC_density_Night$x, 
+                                              y=NEC_density_Night$y)) %>%
+  mutate(param = "NEC Night")
+
+draws_NP<-NP_model_year %>%
+  spread_draws(b_polyYear21) %>%
+  as_tibble()
+NP_density<-density(draws_NP$b_polyYear21)
+plotdata_NP<-as_tibble(bind_cols(x = NP_density$x, 
+                                              y=NP_density$y)) %>%
+  mutate(param = "NP")
+
+draws_Rd<-Rd_model_year %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+Rd_density<-density(draws_Rd$b_Year)
+plotdata_Rd<-as_tibble(bind_cols(x = Rd_density$x, 
+                                              y=Rd_density$y)) %>%
+  mutate(param = "Rd")
+
+draws_Pmax<-Pmax_model_year %>%
+  spread_draws(b_Year) %>%
+  as_tibble() 
+Pmax_density<-density(draws_Pmax$b_Year)
+plotdata_Pmax<-as_tibble(bind_cols(x = Pmax_density$x, 
+                                 y=Pmax_density$y)) %>%
+  mutate(param = "Pmax")
+
+plotdata<-bind_rows(plotdata_NEC_total, 
+                    plotdata_NEC_total_Night,
+                    plotdata_NP,
+                    plotdata_Rd,
+                    plotdata_Pmax)
+
+change_plot<-ggplot(plotdata, aes(x, y)) + 
+  geom_vline(xintercept = 0, lty = 2, alpha = 0.7)+
+  geom_area(fill =  "skyblue", alpha = 0.5) +
+  geom_line(linewidth = 1.3)+
+  facet_wrap(~param, ncol = 1, scale = "free",strip.position = "left")+
+  labs (x = "Rate of change per year",
+        y = "Density")+
+  theme_bw()+
+  theme(strip.background = element_blank(),
+        strip.placement = "outside",
+        strip.text.x = element_text(angle = 90))
 
 # get the conditional effects to make a plots
- ce<- conditional_effects(fit1_f, effects = "PAR")
- ce<-as_tibble(ce$PAR)
+ce<- conditional_effects(fit1_f, effects = "PAR")
+ce<-as_tibble(ce$PAR) %>%
+  left_join(Year_Averages %>% select(Year, mean_coral) %>% mutate(Year = as.factor(Year)))
 
-ggplot()+
-  geom_ribbon(data = ce, aes(x = PAR, ymin = lower__, ymax = upper__), alpha = 0.75, fill = "lightblue")+
+PI_plot<-ggplot()+
+  geom_hline(yintercept = 0, lty = 2)+
+  geom_ribbon(data = ce, aes(x = PAR, ymin = lower__, ymax = upper__), alpha = 0.75, fill = "grey")+
   geom_line(data = ce, aes(x = PAR, y = estimate__), linewidth = 1)+
-  geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
+  geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP, color = mean_coral),
              inherit.aes=FALSE, alpha=0.05)+
-  labs( x = expression(atop("Photosynthetic active radiation",paste("(",~mu~"mol photons", " m"^-2, " s"^-1,")"))),
+  scale_color_viridis(option = "rocket", name = "% Coral Cover", 
+                      trans = "log", end =  0.75, direction  = 1,
+                      breaks = c(1, 5, 10, 15, 20, 25, 30))+
+  labs( x = expression(atop("Photosynthetic Active Radiation",paste("(",~mu~"mol photons", " m"^-2, " s"^-1,")"))),
         y = expression(atop("Net ecosystem production",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
-  theme(panel.grid = element_blank())
+  theme(panel.grid.minor = element_blank())
 
 ggsave(here("Output","PIcurve.pdf"), width = 6, height = 6)
+
+  
+((PI_plot|NP_year&lims(x = c(2008,2025)))&theme(panel.grid.minor = element_blank(),
+                                                legend.title = element_text(size = 14),
+                                                legend.text = element_text(size = 12),
+                                                axis.text.x = element_text(size = 12),
+                                                axis.title.x = element_text(size = 14),
+                                                axis.text.y = element_text(size = 12),
+                                                axis.title.y = element_text(size = 14), 
+                                                legend.position = "none"))/((Pmaxyear|NEC_Day_year)/(Respyear|NEC_Night_year)+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+                                                                                        legend.title = element_text(size = 14),
+                                                                                        legend.text = element_text(size = 12),
+                                                                                        axis.text.x = element_text(size = 12),
+                                                                                        axis.title.x = element_blank(),
+                                                                                        axis.text.y = element_text(size = 12),
+                                                                                        axis.title.y = element_text(size = 14), 
+                                                                                        legend.position = "bottom", 
+                                                                                        legend.title.position = "top")&lims(x = c(2008,2025))&guides(color = guide_colourbar(direction = "horizontal", barwidth = 15)))+plot_layout(heights = c(0.5,1,1))
+
+ggsave(here("Output","Yearly_rates_modelpreds.pdf"), width = 10, height = 16, device = cairo_pdf)
+
+
+# ((NP_year/Pmaxyear/Respyear)|(PI_plot/NEC_Day_year/NEC_Night_year))+plot_annotation(tag_levels = "a")+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+#                                                                                                               legend.title = element_text(size = 14),
+#                                                                                                               legend.text = element_text(size = 12),
+#                                                                                                               axis.text.x = element_text(size = 12),
+#                                                                                                               axis.title.x = element_blank(),
+#                                                                                                               axis.text.y = element_text(size = 12),
+#                                                                                                               axis.title.y = element_text(size = 14),
+#                                                                                                               legend.position = "bottom", 
+#                                                                                                               legend.title.position = "top",
+#                                                                                                               plot.tag.position = c(0.95, .95))&lims(x = c(2008,2025))&guides(color = guide_colourbar(direction = "horizontal", barwidth = 15))
+
+
+
+
 
 ggplot()+
 geom_point(data = LTER1_Pnet, aes(x = PAR, y = PP),
