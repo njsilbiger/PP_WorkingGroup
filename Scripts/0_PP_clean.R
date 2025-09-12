@@ -1813,3 +1813,17 @@ ggsave(here("Output","PosteriorChecks.png"), width = 8, height = 4)
       scale_color_viridis_c(option = "E")+
       theme_bw()
 ggsave(here("Output","NEP_O2.png"), width = 5, height = 4)  
+
+
+### plot respiration vs Pmax
+
+Allcoefs %>% 
+  ggplot(aes(x = -resp_effect, y = pmax_effect))+
+  geom_point()+
+  geom_smooth(method = "lm", color = "black")+
+  coord_trans(x = "log", y = "log")+
+  labs(x = expression(atop("Ecosystem Respiration",paste("(mmol O"[2]," m"^-2, " hr"^-1,")"))),
+       y = expression(atop("Maximum Photosynthetic Capacity",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+  theme_bw()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
