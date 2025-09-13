@@ -1840,3 +1840,99 @@ Seasonal_Averages %>% ggplot(aes(x = GP_mean*24, y = NEC_Day))+
         axis.text = element_text(size = 12))
 
 ggsave(here("Output","GP_NEC.pdf"), width = 5, height = 5)
+
+############## Run an SEM with the seasonal data ###########
+Seasonal_Averages <-Seasonal_Averages %>%
+  mutate(R = -R_mean) # Make R positive
+
+SEMData<-Allcoefs %>%
+  ungroup() %>%
+  mutate(R = -resp_effect)%>%
+  dplyr::select(R, GP = pmax_effect, NEC = NEC_mean_Day, coral = mean_coral)
+
+# idea is that R drives GP which drives NEC
+NEC_bf <- 
+ # bf(NEC|mi() ~ GP + R + coral) + # impute the missing data
+  bf(GP ~ R + log(coral))+
+  bf(R ~ log(coral))+
+  set_rescor(FALSE)
+
+NEC_brms <- brm(NEC_bf, data = SEMData)
+
+tidy(NEC_brms)[,c("response", "term", "estimate")]
+
+new_coral_dat <- data.frame(coral = 15, R = NA)
+
+predict(NEC_brms, newdata = new_coral_dat) |>
+  as_tibble()
+
+new_coral_dat_more <- data.frame(coral = c(1:25), R = NA)
+
+NEC_pred_fit <- linpred_draws(NEC_brms, 
+                               newdata = new_coral_dat_more , 
+                               ndraws = 20) |>
+  filter(.category%in% c("GP")) |>
+  ungroup() |>
+  dplyr::select(coral, R,  .linpred) |>
+  rename(GP = .linpred) |>
+  linpred_draws(NEC_brms, 
+                newdata = _,
+                ndraws = 20) 
+
+ggplot(NEC_pred_fit,
+       aes(x = coral, y = .linpred)) +
+  stat_lineribbon(alpha = 0.2) +
+  stat_lineribbon(fill = NA, color = "black") +
+  scale_fill_manual(values = c("pink", "lightblue", "darkgreen")) +
+  facet_wrap(vars(.category), scale = "free_y")
+
+bayes_R2(NEC_brms)
+
+# calculate direct effects
+# how much does a 1 unit change in coral cover affect NEC
+de <- linpred_draws(NEC_brms,
+                    newdata = data.frame(coral = c(1,2), R = c(0,0))) |>
+  ungroup() |>
+  filter(.category == "GP") |>
+  dplyr::select(coral, R,  .draw, .linpred) |>
+  group_by(.draw) |>
+  arrange(coral) |>
+  summarize(de = .linpred[2] - .linpred[1])
+
+mean(de$de)
+
+quantile(de$de, probs = c(0.05, 0.11, 0.5, 0.89, 0.95))
+
+# use the estimates for GP and R
+ide <- linpred_draws(NEC_brms,
+                     newdata = data.frame(coral = c(1,2),  R = c(0,14.83))) |>
+  ungroup() |>
+  filter(.category == "GP") |>
+  dplyr::select(coral, R, .draw, .linpred) |>
+  group_by(.draw) |>
+  arrange(coral) |>
+  summarize(ide = .linpred[2] - .linpred[1])
+
+# here it is!
+mean(ide$ide)
+
+direct_indirect <- data.frame(Direct = de$de, Indirect = ide$ide) |>
+  pivot_longer(everything())
+
+ggplot(direct_indirect,
+       aes(y = name, x = value)) +
+  stat_interval(fill = "lightblue") +
+  stat_pointinterval() +
+  stat_halfeye(fill = "lightblue")+
+  geom_vline(xintercept = 0, lty = 2, color = "red") +
+  labs(y="", x = "Change in Pmax from 1% increase in coral cover")+
+  theme_bw()+
+  theme(axis.text = element_text(size = 12))
+
+#bayestestR::mediation(NEC_brms)
+
+bayestestR::mediation(
+  model = NEC_brms,
+  treatment = "logcoral", # Specify the name of your treatment variable
+  mediator = "R"   # Specify the name of your mediator variable
+)
