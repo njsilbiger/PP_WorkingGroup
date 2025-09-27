@@ -3,11 +3,11 @@
 library(here)
 library(tidyverse)
 
-NData<-read_csv(here("Data","MCR_LTER_Macroalgal_CHN_2005_to_2022_20230713.csv"))
+NData<-read_csv(here("Data","MCR_LTER_Macroalgal_CHN_2005_to_2024_20250616.csv"))
 
 N_summary<-NData %>%
-  filter(Site == "LTER 1",
-         Habitat == "Back Reef",
+  filter(Site == "LTER_1",
+         Habitat == "Backreef",
          Genus != "Sargassum") %>%
   mutate(N_percent = N/Dry_Weight*100,
          C_percent = C/Dry_Weight*100) %>%
