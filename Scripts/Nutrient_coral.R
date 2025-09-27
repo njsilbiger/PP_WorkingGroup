@@ -48,20 +48,26 @@ p1|p2
 ggsave(here("Output","coral_Npercent.png"), width = 8, height = 5)
 
 
-N_summary %>%
+p3<-N_summary %>%
   ggplot(aes(x = log10(mean_coral), y = mean_N))+
   geom_point()+
  # geom_errorbar(aes(ymin = mean_N-se_N, ymax = mean_N+se_N), width = 0.1)+
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm")+
+  labs(x = "log10 % coral cover",
+       y = "mean %N of Turbinaria")+
+  theme_bw()
 
 
-N_summary %>%
+p4<-N_summary %>%
   ggplot(aes(x = Year, y = mean_N))+
   geom_point()+
  # geom_errorbar(aes(ymin = mean_N-se_N, ymax = mean_N+se_N), width = 0.1)+
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm")+
+  labs(x = "Year",
+       y = "mean %N of Turbinaria")+
+  theme_bw()
 
-
+(p1|p2)/(p3|p4)
 
 N_summary %>%
     ggplot(aes(x = mean_fleshy, y = mean_C))+
