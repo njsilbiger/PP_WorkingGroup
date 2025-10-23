@@ -17,7 +17,7 @@ library(patchwork)
 BenthicCover <- read_sheet('https://docs.google.com/spreadsheets/d/1iA8rP_raCQ8NTPUGqAZ6LVeYza7eKqU4ep6yucpj1U0/edit?usp=sharing')
 # Patches are dispersed around reef, unrelated to upstream and downstream and surveyed radially
 
-
+BenthicCover<-read_csv(here("Data","MCR_LTER_Coral_Cover_Backreef_Wide_20250429.csv"))
 ### CLEAN DATA
 
 # benthic
@@ -25,17 +25,19 @@ BenthicCover <- BenthicCover %>%
   mutate_at(.vars = vars(coral:ctb), .funs = as.numeric)
 
 BC_edit <- BenthicCover %>% 
-  mutate_at(vars(coral:ctb), .funs=as.numeric) 
+  mutate_at(vars(coral:ctb), .funs=as.numeric) %>%
+  mutate(coral = coral+millepora) %>% # millepora is very tiny 
+  select(!millepora)
 
 mean_BC <- BC_edit %>% 
-  filter(Site == "LTER 1") %>% 
-  group_by(Year) %>% # not by patch
+  filter(site == "LTER_1") %>% 
+  group_by(year) %>% # not by patch
   summarise_at(.vars = vars(coral:ctb), .funs = c(mean), na.rm = TRUE) %>% 
   pivot_longer(cols = coral:ctb, names_to = "benthic", values_to = "mean")
 
 se_BC <- BC_edit %>% 
-  filter(Site == "LTER 1") %>% 
-  group_by(Year) %>% # not by patch
+  filter(site == "LTER 1") %>% 
+  group_by(year) %>% # not by patch
   summarise_at(.vars = vars(coral:ctb), .funs = c(plotrix::std.error), na.rm = TRUE) %>% 
   pivot_longer(cols = coral:ctb, names_to = "benthic", values_to = "SE")
 
@@ -76,7 +78,11 @@ anova(lm(data = summaryBC, sand ~ poly(Year,2)))
 ## STACKED BAR PLOT (Supplemental Figure)
 
 # customize palette
-myPal <- c(coral = "#c38370", macroalgae = "#9da993", millepora = "#bdc3cb", ctb = "#523a28", sand = "#d6ad60")
+myPal <- c(coral = "#c38370", macroalgae = "#9da993",
+        #   millepora = "#bdc3cb", 
+         #  ctb = "#523a28", 
+           ctb = "#bdc3cb", 
+           sand = "#d6ad60")
 
 BC_plot <- sum_BC %>% 
   mutate(benthic = factor(benthic, levels = c("coral", "macroalgae", "millepora", "ctb", "sand"))) %>% 
@@ -95,3 +101,32 @@ ggsave(here("Output", "Supplemental_benthic_cover.png"), BC_plot, device = "png"
 
 
 
+mean_BC  %>% 
+  mutate(benthic = factor(benthic, 
+                        #  levels = c("coral", "macroalgae", "ctb", "sand")
+                          levels = c("sand","ctb","macroalgae","coral")
+                          ))%>% 
+  mutate(alpha = ifelse(benthic %in% c("coral","macroalgae"), 1,0.5 ))%>%
+  ggplot(aes(x = year, group = benthic, fill = benthic, y = mean, alpha = alpha))+
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values = myPal, labels = c("Sand","CCA+Turf", "Macroalgae","Coral"))+
+  scale_alpha(range = c(0.5,1))+
+  labs(x = "Year",
+       y = "% Cover",
+       fill = "")+
+  guides(alpha = "none")+
+  theme_minimal()+
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        legend.text = element_text(size = 12),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        #axis.ticks.x = element_line(linewidth = 0.1)
+        )
+ggsave(here("Output","PeteCover.png"), width = 5, height = 3)
+
+
+coral_wide<-mean_BC %>%
+  pivot_wider(names_from = benthic,
+                values_from = mean
+                )

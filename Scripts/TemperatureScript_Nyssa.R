@@ -1,13 +1,20 @@
 ### Temperature over time versus community composition ###
 
 ### load libraries ####
+library(here)
 library(tidyverse)
 library(googlesheets4)
 library(lubridate)
 
 ## Temperature LTER 1
 #Temp_LTER1<-read_sheet("https://docs.google.com/spreadsheets/d/1YJRyNAeo03xLoThBGX2-BtHpWqUpYXIarmYTsIhw5aI/edit?usp=sharing")
-Temp_LTER1<-read_csv(here("Data","LTER1Temperature.csv"))
+Temp_LTER1<-read_csv(here("Data","MCR_LTER02_BTM_Backreef_Forereef_20250522.csv")) %>%
+  filter(reef_type_code == "Backreef") 
+
+Mean_daily_Temp<-Temp_LTER1 %>%
+  mutate(date = as.Date(time_local)) %>%
+  group_by(date)%>%
+  summarise(daily_temp =mean(temperature_c, na.rm = TRUE))
 
 Temp_LTER1 <- Temp_LTER1 %>%
   mutate(Year = year(mdy_hm(time_local)),
