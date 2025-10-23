@@ -25,6 +25,7 @@ library(bayesplot)
 library(ggridges)
 library(ggsci)
 library(psych)
+library(ggcorrplot)
 library(ggcorrplot2)
 
 ### Read in the data ######
@@ -181,6 +182,10 @@ TotalLiving<-Benthic_summary_Algae %>%
             mean_fleshy = sum(mean_cover[name == "Fleshy Macroalgae"]),
             mean_coral = sum(mean_cover[name == "Coral"]))
 
+# Pete's benthic data which is slightly different than Bob's
+PeteData<-read_csv(here("Data","PeteCoralCover.csv")) %>%
+  rename(Year = year)
+
 # calculate yearly averages for all the metabolism data
 #### yearly averages
 Year_Averages <-All_PP_data %>%
@@ -205,7 +210,8 @@ Year_Averages <-All_PP_data %>%
               group_by(Year,Day_Night)%>% 
               summarise(NEC_mean = mean(NEC,na.rm = TRUE),
                         NEC_SE = sd(NEC, na.rm = TRUE)/sqrt(n())) %>%
-              pivot_wider(names_from = Day_Night, values_from = c(NEC_mean, NEC_SE)))
+              pivot_wider(names_from = Day_Night, values_from = c(NEC_mean, NEC_SE))) %>%
+  left_join(PeteData)
 
 
 ### Make a plot of all living cover (basically everything - sand + coral RUbble and algal turf)
@@ -429,12 +435,12 @@ ggsave(here("Output","ChangePosterior.png"), height = 6, width = 10)
 cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,
                                                      mean_fleshy, NEC_mean_Day,
                                                      mean_SST, Rd, Pmax, mean_biomass, 
-                                                     NP_mean, GP_mean, Flow_mean, PAR_mean),
+                                                     NP_mean, GP_mean, Flow_mean,coral, macroalgae ),
                             method = "pearson")
 cor_p   <- rstatix::cor_pmat(Year_Averages%>% select(N_percent, C_percent, mean_coral,
                                                 mean_fleshy, NEC_mean_Day,
                                                 mean_SST, Rd, Pmax,mean_biomass, 
-                                                NP_mean, GP_mean, Flow_mean, PAR_mean),
+                                                NP_mean, GP_mean, Flow_mean,coral, macroalgae ),
                              method ="pearson")
 ggcorrplot(
   cor_mat,
@@ -443,14 +449,14 @@ ggcorrplot(
   p.mat = cor_p,
   sig.level = 0.05,
   #pch = 8,
-  #insig = "blank",
+  insig = "blank",
   #insig = "pch",
   lab = TRUE,
   lab_size = 2.5,
   colors = c("#6D9EC1", "white", "#E46726"),
   title = "Significant correlations of all measured variables"
 )+
-  theme(panel.grid.major.x  = element_blank())+
+  theme(panel.grid.major.x  = element_blank())
  
 ct <- corr.test(Year_Averages %>% select(N_percent, C_percent, mean_coral,
                                          mean_fleshy, NEC_mean_Day,
@@ -485,13 +491,13 @@ gratia::draw(model_Pmax_full, residuals = TRUE)
 # Model: N_Turbinaria ~ s(Year) + s(ER)
 # s(Year) accounts for the long-term trend, so the effect of s(ER) is independent of that trend.
 # We use k=5 to limit the complexity of the smooth, which is wise for small N.
-model_N <- gam(N_percent ~  s(Rd) +s(Year) +s(log(mean_coral)), data = Year_Averages, method = "REML")
+model_N <- gam(N_percent ~  s(coral), data = Year_Averages, method = "REML")
 # Check the summary. Look for a low p-value (<0.05) for s(ER).
 summary(model_N)
 
 # Visualize the partial effects using gratia::draw()
-plot_N <- gratia::draw(model_N, residuals = TRUE) +
-  labs(title = "Partial Effects on N in Turbinaria") +
+plot_N <- gratia::draw(model_N, residuals = TRUE) &
+  #labs(title = "Partial Effects on N in Turbinaria") +
   theme_bw()
 
 ## Run a Bayesian SEM to see how the different parameters are related
