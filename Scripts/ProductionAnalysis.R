@@ -24,6 +24,8 @@ library(semPlot)
 library(bayesplot)
 library(ggridges)
 library(ggsci)
+library(psych)
+library(ggcorrplot2)
 
 ### Read in the data ######
 
@@ -325,7 +327,7 @@ Year_Averages <- Year_Averages %>%
 # create a dataframe of standardized data
 std_data<- Year_Averages %>%
   select(mean_coral, mean_fleshy, Pmax, Rd, NEC_mean_Day, N_percent,
-         mean_SST, mean_biomass) %>%
+         mean_SST, mean_biomass, NP_mean) %>%
   mutate(across(everything(), 
                 ~as.numeric(scale(.x)))) %>%
   bind_cols(Year_Averages %>% select(Year))
@@ -334,13 +336,13 @@ std_data<- Year_Averages %>%
 coral_year<-brm(mean_coral~Year, data = std_data)
 posterior_coral <- as_tibble(as.matrix(coral_year)) %>%
   select(Year = b_Year)%>%
-  mutate(Parameter = "Coral Cover")
+  mutate(Parameter = "% Coral Cover")
 
 # Macroalgae
 fleshy_year<-brm(mean_fleshy~Year, data = std_data)
 posterior_algae <- as_tibble(as.matrix(fleshy_year)) %>%
   select(Year = b_Year)%>%
-  mutate(Parameter = "Macroalgae Cover")
+  mutate(Parameter = "% Macroalgae Cover")
 
 # fish biomass
 fish_year<-brm(mean_biomass~Year, data = std_data)
@@ -360,6 +362,12 @@ posterior_N <- as_tibble(as.matrix(N_year)) %>%
   select(Year = b_Year)%>%
   mutate(Parameter = "%N Content")
 
+# Percent C
+C_year<-brm(N_percent~Year, data = std_data)
+posterior_C <- as_tibble(as.matrix(C_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "%C Content")
+
 # Rd
 Rd_year<-brm(Rd~Year, data = std_data)
 posterior_Rd <- as_tibble(as.matrix(Rd_year)) %>%
@@ -378,6 +386,12 @@ posterior_NEC <- as_tibble(as.matrix(NEC_year)) %>%
   select(Year = b_Year)%>%
   mutate(Parameter = "Net Ecosystem Calcification")
 
+# NEP
+NEP_year<-brm(NP_mean~Year, data = std_data)
+posterior_NEP <- as_tibble(as.matrix(NEP_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Net Ecosystem Production")
+
 # Bring together all the posterior data
 All_posterior<-bind_rows(posterior_coral,
                          posterior_algae,
@@ -386,7 +400,9 @@ All_posterior<-bind_rows(posterior_coral,
                          posterior_Rd,
                          posterior_Pmax,
                          posterior_sst,
-                         posterior_NEC)
+                         posterior_NEC,
+                         posterior_NEP,
+                         posterior_C)
 
 # make a plot showing the change in each parameter over time
 All_posterior %>%
@@ -408,6 +424,50 @@ All_posterior %>%
 
 ggsave(here("Output","ChangePosterior.png"), height = 6, width = 10)
 
+## Make a correlation plot of all the data we are interested in
+
+cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,
+                                                     mean_fleshy, NEC_mean_Day,
+                                                     mean_SST, Rd, Pmax, mean_biomass, 
+                                                     NP_mean, GP_mean, Flow_mean, PAR_mean),
+                            method = "pearson")
+cor_p   <- rstatix::cor_pmat(Year_Averages%>% select(N_percent, C_percent, mean_coral,
+                                                mean_fleshy, NEC_mean_Day,
+                                                mean_SST, Rd, Pmax,mean_biomass, 
+                                                NP_mean, GP_mean, Flow_mean, PAR_mean),
+                             method ="pearson")
+ggcorrplot(
+  cor_mat,
+  hc.order = TRUE,
+  type = "lower",
+  p.mat = cor_p,
+  sig.level = 0.05,
+  #pch = 8,
+  #insig = "blank",
+  #insig = "pch",
+  lab = TRUE,
+  lab_size = 2.5,
+  colors = c("#6D9EC1", "white", "#E46726"),
+  title = "Significant correlations of all measured variables"
+)+
+  theme(panel.grid.major.x  = element_blank())+
+ 
+ct <- corr.test(Year_Averages %>% select(N_percent, C_percent, mean_coral,
+                                         mean_fleshy, NEC_mean_Day,
+                                         mean_SST, Rd, Pmax, mean_biomass, 
+                                         NP_mean, GP_mean, Flow_mean, PAR_mean), adjust = "none")
+corr <- ct$r
+p.mat <- ct$p
+
+  
+ggcorrplot.mixed(corr, 
+                 upper = "ellipse", 
+                 lower = "number", 
+                 p.mat = p.mat, 
+                insig = "label_sig", 
+                sig.lvl = c(0.05, 0.01, 0.001))
+
+ggsave(here("Output","correlations.png"), width = 6, height = 6)
 ## Use a GAM to test how different variables affect ER while controlling for the underlying time trend
 model_ER_full <- gam(Rd ~ s(Year, k=5) + s(log(mean_coral), k=5) + s(Flow_mean, k=5) + 
                        s(Temperature_mean, k=5) +s(N_percent, k=5), 
