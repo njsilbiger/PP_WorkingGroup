@@ -391,17 +391,18 @@ R_all<-  Seasonal_Averages %>%
         axis.text.x = element_text(size = 12))
 
 R_year<- Year_Averages %>%
-  ggplot(aes(x = Year, y = R_mean*12))+
+  ggplot(aes(x = Year, y = -R_mean*12))+
   geom_smooth(method = "lm", color = "black", alpha = 0.2)+
-  geom_errorbar(aes(ymin = R_mean*12 - R_SE*12, ymax =R_mean*12 + R_SE*12, color = mean_coral ), 
+  geom_errorbar(aes(ymin = -R_mean*12 - R_SE*12, ymax =-R_mean*12 + R_SE*12, color = mean_coral ), 
                 width = 0, linewidth = 2, alpha = 0.2)+
   geom_point(aes(color = mean_coral))+
   scale_color_viridis(option = "rocket", name = "% Coral Cover")+
   labs(x = "",
-       y = expression(atop("Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
+       y = expression(atop("Ecosystem Respiration",paste("(mmol O"[2]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
   theme(strip.text = element_blank(),
-        axis.text.x = element_text(size = 12))
+        axis.text.x = element_blank(), 
+        legend.position = "none")
 
 NEC_Day_year<- Year_Averages %>%
   ggplot(aes(x = Year, y = NEC_mean_Day))+
@@ -417,7 +418,8 @@ NEC_Day_year<- Year_Averages %>%
        y = expression(atop("Day Calcification",paste("(mmol CaCO"[3]," m"^-2, " d"^-1,")"))))+
   theme_bw()+
   theme(strip.text = element_blank(),
-        axis.text.x = element_blank())
+        #axis.text.x = element_blank(),
+        legend.position = "none")
 
 NEC_Night_year<- Year_Averages %>%
   ggplot(aes(x = Year, y = NEC_mean_Night))+
@@ -447,6 +449,27 @@ ggsave(here("Output","SeasonalRates_time.png"), height = 8, width = 6)
                           axis.title.y = element_text(size = 14), legend.position = "bottom", legend.title.position = "top")&lims(x = c(2008,2025))
 
 ggsave(here("Output","YearlyRates_time.png"), height = 10, width = 8)
+
+
+(GP_year)/(R_year&theme(legend.position = "bottom", legend.text.position = "top"))/(NEC_Day_year)+
+  plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+                                        axis.text.y = element_text(size = 14),
+                                        axis.title.y = element_text(size = 18),
+                                       # legend.position = "bottom", 
+                                      #  legend.title.position = "top"
+                                        )&lims(x = c(2008,2025))&guides(color = guide_colourbar(direction = "horizontal", barwidth = 15))
+
+((GP_year)/(R_year)/(NEC_Day_year))+plot_layout(guides = "collect")&theme(panel.grid.minor = element_blank(),
+                                                                          axis.text.x = element_text(size = 16),
+                                                                          axis.text.y = element_text(size = 16),
+                                                                          axis.title.y = element_text(size =20),
+                                                                          legend.text = element_text(size = 16),
+                                                                          legend.title = element_text(size = 20),
+                                                                           legend.position = "bottom", 
+                                                                            legend.title.position = "top"
+)&guides(color = guide_colourbar(direction = "horizontal", barwidth = 15))&theme(legend.position = "bottom")
+
+ggsave(here("Output","YearlyRates_talk.pdf"), height = 12, width = 10)
 
 
 Seasonal_Averages %>%

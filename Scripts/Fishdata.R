@@ -1,10 +1,12 @@
 library(tidyverse)
 library(here)
 
-fish<-read_csv(here("Data","MCR_LTER_Annual_Fish_Survey_20240927.csv"))
+fish<-read_csv(here("Data","MCR_LTER_Annual_Fish_Survey_20250324.csv"))
 
 
 fish_clean<-fish %>%
+  filter(Site == "LTER_1",
+         Habitat == "Backreef") %>%
   group_by(Year, Transect)%>%
   summarise(total_biomass = sum(Biomass, na.rm  =TRUE))%>%
   filter(total_biomass<25000) %>% # 3 super high outliers
