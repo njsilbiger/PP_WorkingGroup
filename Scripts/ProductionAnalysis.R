@@ -372,24 +372,34 @@ posterior_Pmax <- as_tibble(as.matrix(Pmax_year)) %>%
   select(Year = b_Year)%>%
   mutate(Parameter = "Maximum Photosynthetic Capacity")
 
+# NEC
+NEC_year<-brm(NEC_mean_Day~Year, data = std_data)
+posterior_NEC <- as_tibble(as.matrix(NEC_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Net Ecosystem Calcification")
+
+# Bring together all the posterior data
 All_posterior<-bind_rows(posterior_coral,
                          posterior_algae,
                          posterior_fish,
                          posterior_N,
                          posterior_Rd,
                          posterior_Pmax,
-                         posterior_sst)
+                         posterior_sst,
+                         posterior_NEC)
 
+# make a plot showing the change in each parameter over time
 All_posterior %>%
   ggplot(aes(x = Year, y = fct_reorder(Parameter, Year, mean), 
              fill = Parameter))+
   geom_vline(xintercept = 0)+
   geom_density_ridges(alpha = 0.5, color = NA)+
   scale_fill_npg()+
-  annotate("text",x = 0.1, y = 0.75, label = "Increasing over time")+
-  annotate("text",x = -0.1, y = 0.75, label = "Decreasing over time")+
+  annotate("text",x = 0.15, y = 0.75, label = "Increasing over time")+
+  annotate("text",x = -0.15, y = 0.75, label = "Decreasing over time")+
   labs(x = "Standardized change per year",
        y = "")+
+  lims(x = c(-0.3,0.3))+
   theme_ridges()+
   theme(legend.position = "none",
         axis.text.y = element_text(size = 14),
