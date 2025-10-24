@@ -512,6 +512,41 @@ sem_data <- Year_Averages %>%
 
 # --- 2. Define the Expanded SEM Syntax ---
 # This model is much more detailed and theoretically rich.
+bsem_model_full_syntax <- '
+  
+  # LEVEL 2: Metabolic Rate Models
+  # GPP is driven by the producers (corals, algae) and abiotic factors
+  GP_mean ~ c1*(mean_coral + mean_fleshy) + c2*Temperature_mean + c3*Flow_mean+c4*N_percent
+  # ER is driven by all respiring organisms and abiotic factors
+  Rd ~ r1*mean_coral + r2*mean_biomass + r3*Temperature_mean + r4*Flow_mean
+
+  # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
+  # Nutrient recycling is driven by mean coral cover
+  N_percent  ~ n1*mean_coral
+  # Calcification is driven by calcifiers and gross photosynthesis
+  NEC_mean_Day  ~ nc1*mean_coral + nc2*GP_mean 
+
+  # COVARIANCES: Allow unexplained parts of external drivers to correlate
+ #Temperature_mean ~~ Flow_mean
+ GP_mean ~~ Rd
+ mean_coral~~mean_fleshy
+ mean_biomass~~mean_fleshy
+  
+  # Indirect effects 
+  # coral to percent N via ER
+  #coral_ER_N:=n1*r1
+'
+
+# --- 3. Fit the Full Bayesian SEM ---
+bsem_fit_full <- bsem(
+  model = bsem_model_full_syntax,
+  data = Year_Averages,
+  n.chains = 4,
+  sample = 6000,      # Increased iterations for a more complex model
+  burnin = 1000,
+  std.lv = TRUE,
+  seed = 42
+)
 
 bsem_model_full_syntax <- '
   # LEVEL 1: Community Structure Models
@@ -612,3 +647,115 @@ semPaths(bsem_fit_small,
          intercepts = FALSE,
          residuals = FALSE,
          curveAdjacent = TRUE)
+
+
+############### A BRMS example #############
+# get standardized SEM data
+semdata2<-Year_Averages %>%
+  select(meancoral = mean_coral, 
+         meanfleshy = mean_fleshy,
+         temperature = Temperature_mean,
+         flow = Flow_mean,
+         Npercent = N_percent,
+         fish = mean_biomass,
+         GP = GP_mean,
+         Rd,
+         NEC = NEC_mean_Day) %>%
+  drop_na(meancoral) %>%
+  mutate(across(everything(), # scale the data
+                ~as.numeric(scale(.x)))) 
+
+# make sure mgcv is installed for smooths
+# install.packages("mgcv")
+
+# ----------------------------
+# SEM with smooth terms + mi()
+# ----------------------------
+
+# GP submodel: smooths for all predictors
+bf_gp <- bf(
+  GP | mi() ~ 1 +
+    s(meancoral,        k = 3) +
+    s(meanfleshy,       k = 3) +
+    s(temperature,  k = 3) +
+    s(flow,         k = 3) +
+    s(Npercent,         k = 3)
+)
+
+# Rd submodel: smooths for all predictors
+bf_rd <- bf(
+  Rd | mi() ~ 1 +
+    s(meancoral,        k = 3) +
+    s(fish,      k = 3) +
+    s(temperature,  k = 3) +
+    s(flow,         k = 3)
+)
+
+# N% submodel: smooth coral cover
+bf_n <- bf(
+  Npercent | mi() ~ 1 +
+    s(meancoral,        k = 3)
+)
+
+# NEC submodel: smooth coral cover and (imputed) GP
+# Note: use mi(GP_mean) here because GP_mean is a modeled node with missingness
+bf_nec <- bf(
+  NEC | mi() ~ 1 +
+    s(meancoral,        k = 3) +
+    s(GP,           k = 3)
+)
+
+# ----------------------------
+# Auxiliary imputation models
+# (intercept-only is fine to start; you can also add covariates/smooths here)
+# ----------------------------
+bf_temp    <- bf(temperature | mi() ~ 1)
+bf_flow    <- bf(flow        | mi() ~ 1)
+bf_coral   <- bf(meancoral       | mi() ~ 1)
+bf_fleshy  <- bf(meanfleshy      | mi() ~ 1)
+bf_biomass <- bf(fish     | mi() ~ 1)
+
+# ----------------------------
+# Fit
+# ----------------------------
+brms_sem_full <- brm(
+  bf_gp + bf_rd + bf_n + bf_nec  +
+    set_rescor(TRUE),         # residual correlations among responses
+  data = semdata2,
+  chains = 3,
+  iter = 6000,
+  warmup = 1000,
+  seed = 42,
+  sample_prior = "no"
+)
+
+edges<-as_tibble(fixef(brms_sem_full)) %>%
+  mutate(coef =rownames(fixef(brms_sem_full))) %>%
+  separate(coef, sep ="_", into = c("to","from","none")) %>%
+  select(!none) %>%
+  filter(from != "Intercept") %>%
+  mutate(from = str_sub(from, start = 2)) %>% # remove the letter s
+  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)
+
+edges %>%
+  ggplot(aes(x = est, y = from))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0)+
+  geom_vline(xintercept = 0)+
+  facet_wrap(~to, scale = "free_y") +
+  theme_minimal()
+
+
+## get the correlated errors
+a<-summary(brms_sem_full) 
+
+cor_res<-as_tibble(a$rescor_pars) %>%
+  mutate(coef = rownames(a$rescor_pars)) %>%
+  mutate(coef = str_remove_all(coef, "[rescor()]")) %>%
+  separate(coef, into = c("x","y"), sep = ",")
+
+cor_res %>%
+  ggplot(aes(x=x, y=y, fill = Estimate))+
+  geom_tile()+
+  scale_fill_gradient(low = "white", high = "pink")+
+  theme_minimal()
