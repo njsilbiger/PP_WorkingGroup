@@ -671,10 +671,13 @@ plot_N <- gratia::draw(model_N, residuals = TRUE) &
 # First detrend the data
 
 sem_data <- Year_Averages %>%
-    select(mean_coral, mean_fleshy, Pmax, Rd, NEC_mean_Day, N_percent,
-           Flow_mean, Temperature_mean, mean_SST) %>%
-  mutate(across(everything(), 
-                ~ residuals(gam(.x ~ s(Year, k=5), data = Year_Averages, na.action = na.exclude))))
+    select(mean_coral, mean_fleshy, Pmax, GP_mean, Rd, NEC_mean_Day, N_percent,
+           Flow_mean, Max_temp, mean_alive, log_coral, mean_biomass) %>%
+#  mutate(across(everything(), 
+ #               ~ residuals(gam(.x ~ s(Year, k=5), data = Year_Averages, na.action = na.exclude)))) %>%
+  mutate(across(everything(), # scale the data
+                ~as.numeric(scale(.x)))) 
+### Use the detrended data --this model makes the most sense right now
 
 
 # --- 2. Define the Expanded SEM Syntax ---
@@ -683,37 +686,46 @@ bsem_model_full_syntax <- '
   
   # LEVEL 2: Metabolic Rate Models
   # GPP is driven by the producers (corals, algae) and abiotic factors
-  GP_mean ~ c1*(mean_coral + mean_fleshy) + c2*Temperature_mean + c3*Flow_mean+c4*N_percent
+  GP_mean ~ c1*(mean_alive) + c2*Max_temp + c3*Flow_mean+c4*N_percent
   # ER is driven by all respiring organisms and abiotic factors
-  Rd ~ r1*mean_coral + r2*mean_biomass + r3*Temperature_mean + r4*Flow_mean
+  Rd ~ r1*log_coral + r2*mean_biomass + r3*Max_temp + r4*Flow_mean
 
   # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
   # Nutrient recycling is driven by mean coral cover
-  N_percent  ~ n1*mean_coral
+  N_percent  ~ n1*log_coral
   # Calcification is driven by calcifiers and gross photosynthesis
-  NEC_mean_Day  ~ nc1*mean_coral + nc2*GP_mean 
+  NEC_mean_Day  ~ nc1*log_coral + nc2*GP_mean +nc3*Max_temp
 
   # COVARIANCES: Allow unexplained parts of external drivers to correlate
  #Temperature_mean ~~ Flow_mean
  GP_mean ~~ Rd
  mean_coral~~mean_fleshy
- mean_biomass~~mean_fleshy
-  
+
   # Indirect effects 
   # coral to percent N via ER
   #coral_ER_N:=n1*r1
 '
 
 # --- 3. Fit the Full Bayesian SEM ---
+
+### Need to standardize these still by centering the residuals above
 bsem_fit_full <- bsem(
   model = bsem_model_full_syntax,
   data = Year_Averages,
   n.chains = 4,
-  sample = 6000,      # Increased iterations for a more complex model
-  burnin = 1000,
+  sample = 8000,      # Increased iterations for a more complex model
+  burnin = 2000,
   std.lv = TRUE,
-  seed = 42
+  seed = 11
 )
+
+# --- 4. Interpret and Visualize ---
+summary(bsem_fit_full, standardize = TRUE, fit.measures = TRUE, ci = TRUE)
+
+
+
+########## STOPPED HERE ###############
+
 
 bsem_model_full_syntax <- '
   # LEVEL 1: Community Structure Models

@@ -22,7 +22,7 @@ Mean_year_Temp<-Mean_daily_Temp %>%
   summarise(Mean_temp =mean(daily_temp  , na.rm = TRUE),
             Max_temp = max(daily_temp  , na.rm = TRUE))
 
-write_csv(x = Mean_year_Temp, file = here("Output","InSituTemp.csv"))
+write_csv(x = Mean_year_Temp, file = here("Data","InSituTemp.csv"))
 
 Temp_LTER1 <- Temp_LTER1 %>%
   mutate(Year = year(mdy_hm(time_local)),
