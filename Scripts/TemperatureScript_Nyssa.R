@@ -16,6 +16,14 @@ Mean_daily_Temp<-Temp_LTER1 %>%
   group_by(date)%>%
   summarise(daily_temp =mean(temperature_c, na.rm = TRUE))
 
+Mean_year_Temp<-Mean_daily_Temp %>%
+  mutate(Year = year(date)) %>%
+  group_by(Year)%>%
+  summarise(Mean_temp =mean(daily_temp  , na.rm = TRUE),
+            Max_temp = max(daily_temp  , na.rm = TRUE))
+
+write_csv(x = Mean_year_Temp, file = here("Output","InSituTemp.csv"))
+
 Temp_LTER1 <- Temp_LTER1 %>%
   mutate(Year = year(mdy_hm(time_local)),
          Month = month(mdy_hm(time_local)),

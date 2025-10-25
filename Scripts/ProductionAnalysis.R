@@ -16,7 +16,6 @@ library(lmerTest)
 library(scales)
 library(patchwork)
 library(ggtext)
-library(ggridges)
 library(viridis)
 library(mgcv)
 library(blavaan)
@@ -56,6 +55,8 @@ Turb<-read_csv(here("Data","MCR_LTER_Macroalgal_CHN_2005_to_2024_20250616.csv"))
   
 ## Bring in the yearly SST data 
 yearly_sst<-read_csv(here("Data","SST_year.csv"))
+#InSituData
+insitu_temp<-read_csv(here("Data","InSituTemp.csv"))
 
 # Total Fish Biomass
 fish<-read_csv(here("Data","fish_clean.csv"))
@@ -325,6 +326,7 @@ Year_Averages <- Year_Averages %>%
                      mean_SST, max_SST)
             ) %>% # add the SST data
   full_join(fish)%>% # bring in the fish biomass data
+  full_join(insitu_temp) %>% # bring in the in situ temperature data
   arrange(Year) %>%
   mutate(log_coral = log(mean_coral)) # log transform the coral data
 
@@ -333,7 +335,7 @@ Year_Averages <- Year_Averages %>%
 # create a dataframe of standardized data
 std_data<- Year_Averages %>%
   select(mean_coral, mean_fleshy, Pmax, Rd, NEC_mean_Day, N_percent,
-         mean_SST, mean_biomass, NP_mean) %>%
+         mean_SST, mean_biomass, NP_mean, Max_temp, GP_mean) %>%
   mutate(across(everything(), 
                 ~as.numeric(scale(.x)))) %>%
   bind_cols(Year_Averages %>% select(Year))
@@ -361,6 +363,11 @@ SST_year<-brm(mean_SST~Year, data = std_data)
 posterior_sst <- as_tibble(as.matrix(SST_year)) %>%
   select(Year = b_Year)%>%
   mutate(Parameter = "Sea Surface Temperature")
+
+temp_year<-brm(Max_temp~Year, data = std_data)
+posterior_temp <- as_tibble(as.matrix(temp_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Max Temperature")
 
 # Percent N
 N_year<-brm(N_percent~Year, data = std_data)
@@ -398,6 +405,12 @@ posterior_NEP <- as_tibble(as.matrix(NEP_year)) %>%
   select(Year = b_Year)%>%
   mutate(Parameter = "Net Ecosystem Production")
 
+# GP
+GP_year<-brm(GP_mean~Year, data = std_data)
+posterior_GP <- as_tibble(as.matrix(GP_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Gross Ecosystem Production")
+
 # Bring together all the posterior data
 All_posterior<-bind_rows(posterior_coral,
                          posterior_algae,
@@ -405,20 +418,32 @@ All_posterior<-bind_rows(posterior_coral,
                          posterior_N,
                          posterior_Rd,
                          posterior_Pmax,
-                         posterior_sst,
+                         #posterior_sst,
                          posterior_NEC,
                          posterior_NEP,
-                         posterior_C)
+                         posterior_C,
+                         posterior_temp,
+                         posterior_GP)
 
 # make a plot showing the change in each parameter over time
+# Get the default NPG palette colors
+npg_colors <- pal_npg("nrc")(10) # Default NPG palette has 10 colors
+
+# Create a color ramp function to extend the palette to 11 colors
+# This will interpolate between the existing NPG colors to generate an 11th color
+npg_extended_palette_function <- colorRampPalette(npg_colors)
+
+# Generate 11 colors from the extended palette
+npg_11_colors <- npg_extended_palette_function(11)
+
 All_posterior %>%
   ggplot(aes(x = Year, y = fct_reorder(Parameter, Year, mean), 
              fill = Parameter))+
   geom_vline(xintercept = 0)+
   geom_density_ridges(alpha = 0.5, color = NA)+
-  scale_fill_npg()+
-  annotate("text",x = 0.15, y = 0.75, label = "Increasing over time")+
-  annotate("text",x = -0.15, y = 0.75, label = "Decreasing over time")+
+  scale_fill_manual(values = npg_11_colors)+
+  annotate("text",x = 0.1, y = 0.75, label = "Increasing over time")+
+  annotate("text",x = -0.1, y = 0.75, label = "Decreasing over time")+
   labs(x = "Standardized change per year",
        y = "")+
   lims(x = c(-0.3,0.3))+
@@ -428,19 +453,152 @@ All_posterior %>%
         axis.title.x = element_text(size = 14),
         axis.text.x = element_text(size = 12))
 
-ggsave(here("Output","ChangePosterior.png"), height = 6, width = 10)
+ggsave(here("Output","ChangePosterior.pdf"), height = 6, width = 10)
 
+### make a plot showing the bulk % change from start to end of timeseries
+
+## tricky because the timeseries is different for each variable
+
+get_first_non_na_per_column <- function(tbl) {
+  # Apply a function to each column of the tibble
+  # The function finds the index of the first non-NA value
+  # and then extracts that value from the column.
+  # If a column contains only NAs, NA is returned for that column.
+  sapply(tbl, function(col) {
+    first_non_na_index <- which(!is.na(col))[1]
+    if (is.na(first_non_na_index)) {
+      NA  # Return NA if no non-NA value is found
+    } else {
+      col[first_non_na_index]
+    }
+  })
+}
+
+get_last_non_na_per_column <- function(data_tibble) {
+  # Ensure the input is a tibble
+  if (!inherits(data_tibble, "tbl_df")) {
+    stop("Input must be a tibble.")
+  }
+  
+  # Apply a function to each column to find the last non-NA value
+  last_values <- purrr::map(data_tibble, function(col) {
+    non_na_values <- col[!is.na(col)]
+    if (length(non_na_values) > 0) {
+      return(tail(non_na_values, 1))
+    } else {
+      return(NA) # Return NA if all values in the column are NA
+    }
+  })
+  
+  # Convert the list to a named vector
+  unlist(last_values)
+}
+
+# get the first value
+first<-get_first_non_na_per_column(Year_Averages %>%
+                              select(NP_mean, GP_mean, mean_fleshy,
+                                     mean_coral, NEC_mean_Day, Pmax, Rd,
+                                     N_percent, C_percent, mean_biomass, Max_temp))
+first<-as_tibble(first) %>%
+  mutate(Params = names(first)) %>%
+  rename(first = value)
+
+
+last<-get_last_non_na_per_column(Year_Averages %>%
+                              select(NP_mean, GP_mean, mean_fleshy,
+                                     mean_coral, NEC_mean_Day, Pmax, Rd,
+                                     N_percent, C_percent, mean_biomass, Max_temp))
+
+last<-as_tibble(last) %>%
+  mutate(Params = names(last))%>%
+  rename(last = value)
+
+## average first 5 years and last 5 years to remove effect of anomalous 
+first5<- Year_Averages%>%
+  filter(Year %in% c(2008:2012)) %>%
+  select(NP_mean, GP_mean, mean_fleshy,
+         mean_coral, NEC_mean_Day, Pmax, Rd,
+         N_percent, C_percent, mean_biomass, Max_temp)%>%
+  pivot_longer(cols = NP_mean:Max_temp) %>%
+  group_by(name) %>%
+  summarise(first = mean(value, na.rm = TRUE))
+
+last5<- Year_Averages%>%
+  filter(Year %in% c(2019:2024)) %>%
+  select(NP_mean, GP_mean, mean_fleshy,
+         mean_coral, NEC_mean_Day, Pmax, Rd,
+         N_percent, C_percent, mean_biomass, Max_temp)%>%
+  pivot_longer(cols = NP_mean:Max_temp) %>%
+  group_by(name) %>%
+  summarise(last = mean(value, na.rm = TRUE)) 
+
+
+
+
+# calculate the percent change in the variables
+Per_change_var <- first %>%
+  left_join(last) %>%
+  mutate(percent_change = (last-first)/first*100) %>%
+  mutate(percent_change = ifelse(Params == "NP_mean", -percent_change, percent_change)) %>%
+  arrange(desc(percent_change))%>%
+  mutate(nicenames = case_when(Params== "mean_fleshy" ~ "% Macroalgae Cover",
+                               Params== "NP_mean" ~ "Net Ecosystem Production",
+                               Params== "Max_temp" ~ "Max Temperature",
+                               Params== "mean_biomass"~ "Fish Biomass",
+                               Params== "C_percent" ~ "% C Content",
+                               Params== "Pmax" ~ "Maximum Photosynthetic Capacity",
+                               Params== "GP_mean" ~ "Gross Ecosystem Production",
+                               Params== "N_percent"~ "%N Content",
+                               Params== "Rd" ~ "Ecosystem Respirataion",
+                               Params== "NEC_mean_Day" ~ "Net Ecosystem Calcification",
+                               Params== "mean_coral" ~ "% Coral Cover")
+  )
+
+
+## Make a lillipop plot
+
+
+
+Per_change_var %>%
+  mutate(nicenames = factor(nicenames, levels = c("% Macroalgae Cover",
+                                                  "Net Ecosystem Production",
+                                                  "Max Temperature",
+                                                  "Fish Biomass",
+                                                  "Gross Ecosystem Production",
+                                                  "Maximum Photosynthetic Capacity",
+                                                  "Net Ecosystem Calcification",
+                                                  "Ecosystem Respirataion",
+                                                  "% Coral Cover",
+                                                  "%N Content",
+                                                  "% C Content"
+    
+  ))) %>%
+  mutate(color = ifelse(percent_change>0, "pos", "neg"))%>%
+  ggplot(aes(x = percent_change, y = fct_rev(nicenames)))+
+  geom_segment(aes(x = 0, xend = percent_change, yend = fct_rev(nicenames)), size = 1.1)+
+  geom_point(aes(x = percent_change, color = color), size = 4)+
+  geom_vline(xintercept = 0)+
+  scale_color_manual(values = c("#B22222","#22B2B2"))+
+  labs(x = "Percent change over collected time series (%)",
+       y = "")+
+  theme_minimal()+
+  lims(x = c(-100,200))+
+  theme(legend.position = "none",
+        axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 14))
+
+ggsave(here("Output","lollipop.png"), height = 6, width = 8)  
 ## Make a correlation plot of all the data we are interested in
 
 cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,
                                                      mean_fleshy, NEC_mean_Day,
-                                                     mean_SST, Rd, Pmax, mean_biomass, 
-                                                     NP_mean, GP_mean, Flow_mean,coral, macroalgae ),
+                                                     Max_temp, Rd, Pmax, mean_biomass, 
+                                                     NP_mean, GP_mean, mean_coral, mean_fleshy ),
                             method = "pearson")
 cor_p   <- rstatix::cor_pmat(Year_Averages%>% select(N_percent, C_percent, mean_coral,
                                                 mean_fleshy, NEC_mean_Day,
-                                                mean_SST, Rd, Pmax,mean_biomass, 
-                                                NP_mean, GP_mean, Flow_mean,coral, macroalgae ),
+                                                Max_temp, Rd, Pmax,mean_biomass, 
+                                                NP_mean, GP_mean, mean_coral, mean_fleshy ),
                              method ="pearson")
 ggcorrplot(
   cor_mat,
@@ -449,7 +607,7 @@ ggcorrplot(
   p.mat = cor_p,
   sig.level = 0.05,
   #pch = 8,
-  insig = "blank",
+  #insig = "blank",
   #insig = "pch",
   lab = TRUE,
   lab_size = 2.5,
@@ -458,12 +616,21 @@ ggcorrplot(
 )+
   theme(panel.grid.major.x  = element_blank())
  
-ct <- corr.test(Year_Averages %>% select(N_percent, C_percent, mean_coral,
-                                         mean_fleshy, NEC_mean_Day,
-                                         mean_SST, Rd, Pmax, mean_biomass, 
-                                         NP_mean, GP_mean, Flow_mean, PAR_mean), adjust = "none")
+ct <- corr.test(Year_Averages %>% 
+                  mutate(log_fleshy = log(mean_fleshy),
+                         log_fish = log(mean_biomass))%>%
+                  select( NP = NP_mean, GP = GP_mean,Rd, Pmax,
+                                          NEC=NEC_mean_Day,
+                                          `%N`=N_percent, `%C`=C_percent, 
+                                          `% Coral`=log_coral,
+                                         `% Algae`= log_fleshy, 
+                                         `Fish` = log_fish, 
+                                         `Max Temp`= Max_temp 
+                                        ), adjust = "none")
 corr <- ct$r
 p.mat <- ct$p
+
+
 
   
 ggcorrplot.mixed(corr, 
@@ -473,7 +640,7 @@ ggcorrplot.mixed(corr,
                 insig = "label_sig", 
                 sig.lvl = c(0.05, 0.01, 0.001))
 
-ggsave(here("Output","correlations.png"), width = 6, height = 6)
+ggsave(here("Output","correlations.pdf"), width = 10, height = 10)
 ## Use a GAM to test how different variables affect ER while controlling for the underlying time trend
 model_ER_full <- gam(Rd ~ s(Year, k=5) + s(log(mean_coral), k=5) + s(Flow_mean, k=5) + 
                        s(Temperature_mean, k=5) +s(N_percent, k=5), 
@@ -652,6 +819,10 @@ semPaths(bsem_fit_small,
 ############### A BRMS example #############
 # get standardized SEM data
 semdata2<-Year_Averages %>%
+  mutate( logfleshy = log(mean_fleshy),
+          logfish = log(mean_biomass),
+          Rd =-R_mean,
+          NEC = NEC_mean_Day+NEC_mean_Night,)%>%
   select(meancoral = mean_coral, 
          meanfleshy = mean_fleshy,
          temperature = Temperature_mean,
@@ -660,7 +831,10 @@ semdata2<-Year_Averages %>%
          fish = mean_biomass,
          GP = GP_mean,
          Rd,
-         NEC = NEC_mean_Day) %>%
+         NEC,
+         logcoral = log_coral,
+         logfleshy, logfish
+        ) %>%
   drop_na(meancoral) %>%
   mutate(across(everything(), # scale the data
                 ~as.numeric(scale(.x)))) 
@@ -675,34 +849,60 @@ semdata2<-Year_Averages %>%
 # GP submodel: smooths for all predictors
 bf_gp <- bf(
   GP | mi() ~ 1 +
-    s(meancoral,        k = 3) +
-    s(meanfleshy,       k = 3) +
-    s(temperature,  k = 3) +
-    s(flow,         k = 3) +
-    s(Npercent,         k = 3)
+    s(meancoral,        k = 5) +
+    s(meanfleshy,       k = 5) +
+    s(temperature,  k = 5) +
+    s(flow,         k = 5) +
+    s(Npercent,         k = 4)
+)
+
+bf_gp <- bf(
+  GP | mi() ~ 1 + logcoral + logfleshy+ temperature+I(temperature^2) +Npercent
 )
 
 # Rd submodel: smooths for all predictors
 bf_rd <- bf(
   Rd | mi() ~ 1 +
-    s(meancoral,        k = 3) +
-    s(fish,      k = 3) +
-    s(temperature,  k = 3) +
-    s(flow,         k = 3)
+    s(meancoral,        k = 5) +
+    s(fish,      k = 5) +
+    s(temperature,  k = 5) +
+    s(flow,         k = 5)
+)
+
+bf_rd <- bf(
+  Rd | mi() ~ 1 + logcoral + logfish+temperature
 )
 
 # N% submodel: smooth coral cover
 bf_n <- bf(
   Npercent | mi() ~ 1 +
-    s(meancoral,        k = 3)
+    s(meancoral,        k = 5)
 )
 
+bf_n <- bf(
+  Npercent | mi() ~ 1 + logcoral
+)
 # NEC submodel: smooth coral cover and (imputed) GP
 # Note: use mi(GP_mean) here because GP_mean is a modeled node with missingness
 bf_nec <- bf(
   NEC | mi() ~ 1 +
-    s(meancoral,        k = 3) +
-    s(GP,           k = 3)
+    s(meancoral,        k = 5) +
+    s(GP,           k = 5)+
+    s(temperature,           k = 5)
+   
+)
+
+bf_nec <- bf(
+  NEC | mi() ~ 1 +
+    s(meancoral,        k = 5) +
+    s(GP,           k = 5)+
+    s(temperature,           k = 5)
+  
+)
+
+bf_nec <- bf(
+  NEC | mi() ~ 1 + logcoral+ GP+temperature +I(temperature^2)
+  
 )
 
 # ----------------------------
@@ -727,6 +927,85 @@ brms_sem_full <- brm(
   warmup = 1000,
   seed = 42,
   sample_prior = "no"
+)
+
+brms_gp <- brm( bf_gp,  
+    #set_rescor(TRUE),         # residual correlations among responses
+  data = semdata2,
+  chains = 3,
+  iter = 6000,
+  warmup = 1000,
+  seed = 42,
+  sample_prior = "no"
+)
+
+gp_edges<-as_tibble(fixef(brms_gp)) %>%
+  mutate(coef =rownames(fixef(brms_gp))) %>%
+  filter(coef != "Intercept") %>%
+  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)
+
+gp_edges %>%
+  ggplot(aes(x = est, y = coef))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0)+
+  geom_vline(xintercept = 0)+
+  theme_minimal()
+
+
+brms_rd <- brm( bf_rd,  
+                #set_rescor(TRUE),         # residual correlations among responses
+                data = semdata2,
+                chains = 3,
+                iter = 6000,
+                warmup = 1000,
+                seed = 42,
+                sample_prior = "no"
+)
+
+rd_edges<-as_tibble(fixef(brms_rd)) %>%
+  mutate(coef =rownames(fixef(brms_rd))) %>%
+  filter(coef != "Intercept") %>%
+  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)
+
+rd_edges %>%
+  ggplot(aes(x = est, y = coef))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0)+
+  geom_vline(xintercept = 0)+
+  theme_minimal()
+
+brms_n <- brm( bf_n,  
+                #set_rescor(TRUE),         # residual correlations among responses
+                data = semdata2,
+                chains = 3,
+                iter = 6000,
+                warmup = 1000,
+                seed = 42,
+                sample_prior = "no"
+)
+
+
+brms_nec <- brm( bf_nec,  
+               #set_rescor(TRUE),         # residual correlations among responses
+               data = semdata2,
+               chains = 3,
+               iter = 6000,
+               warmup = 1000,
+               seed = 42,
+               sample_prior = "no"
+)
+
+
+
+### Do it one layer at a time because of missing data maybe?
+brms_sem_full <- brm( bf_nec,  
+                      #set_rescor(TRUE),         # residual correlations among responses
+                      data = semdata2,
+                      chains = 3,
+                      iter = 6000,
+                      warmup = 1000,
+                      seed = 42,
+                      sample_prior = "no"
 )
 
 edges<-as_tibble(fixef(brms_sem_full)) %>%
