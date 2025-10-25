@@ -162,11 +162,47 @@ Benthic_summary_Algae<-BenthicCover_Algae %>%
   ), "Fleshy Macroalgae",name))%>%
   mutate(name = ifelse(name %in%c("Algal Turf", 
                                   "Damselfish Turf", 
-                                  "Coral Rubble"
-                                  #"Bare Space"
-                                  ),"Turf", name))%>%
+                                  "Coral Rubble",
+                                  "Lobophora variegata",
+                                  "Shell Debris",  
+                                   "Bare Space"
+                                  ),"Turf/Cyanobacteria", name))%>%
+  mutate(name = ifelse(name %in%c("Peyssonnelia bornetii", 
+                                  "Peyssonnelia sp.", 
+                                  "Sponge",
+                                  "Tridacna sp.",
+                                  "No data"
+  ),"Other", name))%>%
   group_by(Year, Site, name)%>%
-  summarise(mean_cover = mean(Percent_Cover, na.rm = TRUE))
+  summarise(total_cover = sum(Percent_Cover, na.rm = TRUE),
+            mean_cover = 100*total_cover/5000)
+
+myPal <- c(Coral = "#c38370", `Fleshy Macroalgae` = "#9da",
+           `Turf/Cyanobacteria` =  "#9da993",
+           #   millepora = "#bdc3cb", 
+             `Crustose Corallines` = "#523a28", 
+           Other = "#bdc3cb", 
+           Sand = "#d6ad60")
+
+Benthic_summary_Algae %>%
+  mutate(name = factor(name, levels = c("Coral","Fleshy Macroalgae",
+                                        "Crustose Corallines","Turf/Cyanobacteria",
+                                        "Sand","Other")))%>%
+  filter(Site == "LTER 1")%>%
+  ggplot(aes(x = Year, y = mean_cover, fill = name))+
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = myPal)+
+  theme_classic() +
+  labs(fill = "",
+       y = "% Cover") +
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.position = "bottom") 
+  
+
+ggsave(filename = here("Output","BenthicBob.png"), width = 8, height = 6)
 
 ## Calculate the total percent of calcifiers
 Total_Calc<-Benthic_summary_Algae %>%
@@ -186,6 +222,7 @@ TotalLiving<-Benthic_summary_Algae %>%
 # Pete's benthic data which is slightly different than Bob's
 PeteData<-read_csv(here("Data","PeteCoralCover.csv")) %>%
   rename(Year = year)
+
 
 # calculate yearly averages for all the metabolism data
 #### yearly averages
@@ -237,14 +274,14 @@ LTER1_coverliving<-Benthic_summary_Algae %>%
         panel.grid.minor = element_blank())
 
 LTER1_cover<-Benthic_summary_Algae %>%
-  filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae", "Turf"),
+  filter(name %in% c("Coral","Crustose Corallines","Fleshy Macroalgae", "Turf/Cyanobacteria"),
          Site == "LTER 1")%>%
   ggplot(aes(x = Year, y = mean_cover, color = name))+
   geom_point(size = 2)+
   geom_line(size = 1)+
   scale_color_manual(values = c("#CC7161","lightpink","darkgreen","lightgreen"))+
   geom_text(data = tibble(Year = c(2007, 2017, 2015, 2014), 
-                          name = c("Coral","Crustose Corallines","Fleshy Macroalgae", "Turf"), 
+                          name = c("Coral","Crustose Corallines","Fleshy Macroalgae", "Turf/Cyanobacteria"), 
                           mean_cover = c(33,20,0, 54)),
             aes(x = Year, y = mean_cover, label = name))+
   labs(x = "",
@@ -582,7 +619,7 @@ Per_change_var %>%
   labs(x = "Percent change over collected time series (%)",
        y = "")+
   theme_minimal()+
-  lims(x = c(-100,200))+
+  lims(x = c(-100,400))+
   theme(legend.position = "none",
         axis.text = element_text(size = 12),
         axis.title.x = element_text(size = 14))
