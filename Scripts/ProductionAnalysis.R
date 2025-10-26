@@ -688,7 +688,7 @@ Per_change_var %>%
         axis.text = element_text(size = 12),
         axis.title.x = element_text(size = 14))
 
-ggsave(here("Output","lollipop.png"), height = 6, width = 8)  
+ggsave(here("Output","lollipop.pdf"), height = 6, width = 8)  
 ## Make a correlation plot of all the data we are interested in
 
 cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,

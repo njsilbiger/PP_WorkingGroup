@@ -189,9 +189,18 @@ res$daily %>%
   ggplot(aes(date, dhw)) +
   geom_line() +
   geom_area(fill = "firebrick", alpha = 0.6, color = NA) +
-  labs(x = "Date", y = "DHW (°C-weeks)", title = "Mo'orea Daily Degree Heating Weeks (trailing 12 weeks)")+
+  labs(x = "", 
+       y = "DHW (°C-weeks)", 
+     #  title = "Mo'orea Daily Degree Heating Weeks (trailing 12 weeks)"
+       )+
   #scale_fill_manual("firebrick")+
-  theme_bw()
+  theme_minimal()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14)) 
+
+ggsave(filename = here("Output","DHW.pdf"), width = 8, height = 4)
 
 res$yearly %>%
   ggplot(aes(year, dhw_max)) +
@@ -199,7 +208,12 @@ res$yearly %>%
   labs(x = "Year", y = "Annual Max DHW (°C-weeks)", 
       # title = "Annual Maximum DHW by Year"
        )+
-  theme_minimal()
+  theme_minimal()+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14)) 
+
   
 
 Mean_daily_Temp %>%
