@@ -172,7 +172,7 @@ Benthic_summary_Algae<-BenthicCover_Algae %>%
                                   "Sponge",
                                   "Tridacna sp.",
                                   "No data"
-  ),"Other", name))%>%
+  ),"Sand", name))%>% # there is barely any of this in the dataset so group it with sand for the visual
   group_by(Year, Site, name)%>%
   summarise(total_cover = sum(Percent_Cover, na.rm = TRUE),
             mean_cover = 100*total_cover/5000)
@@ -202,7 +202,7 @@ Benthic_summary_Algae %>%
         legend.position = "bottom") 
   
 
-ggsave(filename = here("Output","BenthicBob.png"), width = 8, height = 6)
+ggsave(filename = here("Output","BenthicBob.pdf"), width = 8, height = 6)
 
 ## Calculate the total percent of calcifiers
 Total_Calc<-Benthic_summary_Algae %>%
@@ -278,7 +278,7 @@ LTER1_cover<-Benthic_summary_Algae %>%
          Site == "LTER 1")%>%
   ggplot(aes(x = Year, y = mean_cover, color = name))+
   geom_point(size = 2)+
-  geom_line(size = 1)+
+  geom_line(linewidth = 1)+
   scale_color_manual(values = c("#CC7161","lightpink","darkgreen","lightgreen"))+
   geom_text(data = tibble(Year = c(2007, 2017, 2015, 2014), 
                           name = c("Coral","Crustose Corallines","Fleshy Macroalgae", "Turf/Cyanobacteria"), 
@@ -655,14 +655,16 @@ ggcorrplot(
  
 ct <- corr.test(Year_Averages %>% 
                   mutate(log_fleshy = log(mean_fleshy),
-                         log_fish = log(mean_biomass))%>%
+                         log_fish = log(mean_biomass),
+                         total_NEC = NEC_mean_Day+NEC_mean_Night)%>%
                   select( NP = NP_mean, GP = GP_mean,Rd, Pmax,
                                           NEC=NEC_mean_Day,
                                           `%N`=N_percent, `%C`=C_percent, 
                                           `% Coral`=log_coral,
                                          `% Algae`= log_fleshy, 
                                          `Fish` = log_fish, 
-                                         `Max Temp`= Max_temp 
+                                         `Max Temp`= Max_temp,
+                                          `Current Speed` = Flow_mean
                                         ), adjust = "none")
 corr <- ct$r
 p.mat <- ct$p
@@ -707,11 +709,16 @@ plot_N <- gratia::draw(model_N, residuals = TRUE) &
 ## Run a Bayesian SEM to see how the different parameters are related
 # First detrend the data
 
-sem_data <- Year_Averages %>%
+sem_data <- Year_Averages  %>% 
+  drop_na(mean_coral) %>%
+  mutate(log_fleshy = log(mean_fleshy),
+         log_alive = log(mean_alive),
+         log_fish = log(mean_biomass))%>%
     select(mean_coral, mean_fleshy, Pmax, GP_mean, Rd, NEC_mean_Day, N_percent,
-           Flow_mean, Max_temp, mean_alive, log_coral, mean_biomass) %>%
+           Flow_mean, Max_temp, mean_alive, log_coral, mean_biomass,log_fish,
+           log_fleshy, log_alive, C_percent) %>%
 #  mutate(across(everything(), 
- #               ~ residuals(gam(.x ~ s(Year, k=5), data = Year_Averages, na.action = na.exclude)))) %>%
+#                ~ residuals(gam(.x ~ s(Year, k=3), data = Year_Averages, na.action = na.exclude)))) %>%
   mutate(across(everything(), # scale the data
                 ~as.numeric(scale(.x)))) 
 ### Use the detrended data --this model makes the most sense right now
@@ -720,27 +727,33 @@ sem_data <- Year_Averages %>%
 # --- 2. Define the Expanded SEM Syntax ---
 # This model is much more detailed and theoretically rich.
 bsem_model_full_syntax <- '
+  log_coral ~ l1*Max_temp
   
   # LEVEL 2: Metabolic Rate Models
   # GPP is driven by the producers (corals, algae) and abiotic factors
-  GP_mean ~ c1*(mean_alive) + c2*Max_temp + c3*Flow_mean+c4*N_percent
+  Pmax ~ c1*log_coral +c3*Max_temp
   # ER is driven by all respiring organisms and abiotic factors
-  Rd ~ r1*log_coral + r2*mean_biomass + r3*Max_temp + r4*Flow_mean
+  Rd ~ r1*log_coral +r2*log_fish+r3*Max_temp
 
   # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
   # Nutrient recycling is driven by mean coral cover
   N_percent  ~ n1*log_coral
   # Calcification is driven by calcifiers and gross photosynthesis
-  NEC_mean_Day  ~ nc1*log_coral + nc2*GP_mean +nc3*Max_temp
+#  NEC_mean_Day  ~ nc2*GP_mean 
 
   # COVARIANCES: Allow unexplained parts of external drivers to correlate
  #Temperature_mean ~~ Flow_mean
- GP_mean ~~ Rd
- mean_coral~~mean_fleshy
-
+ Pmax ~~ Rd
+ log_coral~~log_fleshy
+  # N_percent~~C_percent
+  
   # Indirect effects 
   # coral to percent N via ER
   #coral_ER_N:=n1*r1
+  #Temperature to Rd via coral -- compare to c3 direct effect of temp on Rd
+  Temp_to_R:=l1*r1
+  Temp_to_Pmax:=l1*c1
+  Temp_to_N:=l1*n1
 '
 
 # --- 3. Fit the Full Bayesian SEM ---
@@ -748,72 +761,55 @@ bsem_model_full_syntax <- '
 ### Need to standardize these still by centering the residuals above
 bsem_fit_full <- bsem(
   model = bsem_model_full_syntax,
-  data = Year_Averages,
-  n.chains = 4,
-  sample = 8000,      # Increased iterations for a more complex model
+  data = sem_data,
+   # Year_Averages  %>% 
+  #  drop_na(mean_coral) %>%
+   # mutate(log_fleshy = log(mean_fleshy),
+    #       log_alive = log(mean_alive),
+     #      log_fish = log(mean_biomass)),
+  n.chains = 3,
+  sample = 10000,      # Increased iterations for a more complex model
   burnin = 2000,
   std.lv = TRUE,
-  seed = 11
+  seed = 11,
+  em.h1.iter.max = 5000,
+  control = list(adapt_delta = 0.99, max_treedepth = 18)
 )
 
 # --- 4. Interpret and Visualize ---
-summary(bsem_fit_full, standardize = TRUE, fit.measures = TRUE, ci = TRUE)
+summary(bsem_fit_full, fit.measures = TRUE, ci = TRUE)
 
 
+# To run posterior predictive checks on the fit indices 'chisq' and 'srmr'
+ppmc_res <- ppmc(bsem_fit_full, thin = 10, fit.measures = c("chisq", "srmr"))
+# Plot the results
+plot(ppmc_res)
 
+plot(bsem_fit_full, plot.type = "dens")
+
+# Extract posterior samples
+#mcmc_samples <- as.matrix(blavInspect(bsem_fit_full, 'mcmc'))
+# Plot the posterior areas for a selection of parameters
+#mcmc_areas(mcmc_samples, pars = c("l1","c1","c3","r1","r2","r3","n1"), prob = 0.9, prob_outer = 0.95)
+
+fitmeasures(bsem_fit_full)
+
+# Plot the path diagram for the fitted model
+semPaths(bsem_fit_full, what = "est", 
+         layout = "spring", edge.label.cex = 1.2, 
+         intercepts = FALSE, residuals = FALSE)
 ########## STOPPED HERE ###############
 
 
-bsem_model_full_syntax <- '
-  # LEVEL 1: Community Structure Models
-  # Coral cover is driven by temperature stress and algal competition
-  mean_coral ~ Temperature_mean + mean_fleshy 
-  # Algal cover is driven by temp and controlled by fish
- # Macroalgae ~ Temp + Fish_Biomass
-
-  # LEVEL 2: Metabolic Rate Models
-  # GPP is driven by the producers (corals, algae) and abiotic factors
-  Pmax ~ c1*mean_coral + c2*mean_fleshy + Temperature_mean + Flow_mean
-  # ER is driven by all respiring organisms and abiotic factors
-  Rd ~ r1*mean_coral + r2*mean_fleshy + r3*Temperature_mean + r4*Flow_mean
-
-  # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
-  # Nutrient recycling is driven by total respiration
-  N_percent  ~ n1*Rd
-  # Calcification is driven by calcifiers and inhibited by algae
-  NEC_mean_Day  ~ nc1*mean_coral + nc2*Pmax 
-
-  # COVARIANCES: Allow unexplained parts of external drivers to correlate
-  Temperature_mean ~~ Flow_mean
-  Pmax ~~ Rd
-  
-  # Indirect effects 
-  # coral to percent N via ER
-  coral_ER_N:=n1*r1
-'
-# --- 3. Fit the Full Bayesian SEM ---
-bsem_fit_full <- bsem(
-  model = bsem_model_full_syntax,
-  data = sem_data,
-  missing = 'fiml', # Essential for handling the missing NEC data
-  n.chains = 4,
-  sample = 6000,      # Increased iterations for a more complex model
-  burnin = 1000,
-  std.lv = TRUE,
-  seed = 42
-)
-
-# --- 4. Interpret and Visualize ---
-summary(bsem_fit_full, standardize = TRUE, fit.measures = TRUE, ci = TRUE)
 
 # The path diagram will be more complex, so a different layout might be better.
 semPaths(bsem_fit_full, 
-         what = "std",
-         whatLabels = "est.std",
+         what = "est",
+         whatLabels = "est",
          layout = "spring", # "spring" layout handles web-like structures well
          edge.label.cex = 1.1,
-         fade = FALSE,
-         residuals = TRUE, # Show residuals to see unexplained variance
+         fade = TRUE,
+         residuals = FALSE, # Show residuals to see unexplained variance
          nCharNodes = 0,
          sizeMan = 10,
          style = "lisrel",
@@ -822,6 +818,9 @@ semPaths(bsem_fit_full,
 
 ### SImple model with SST driving coral and coral driving %N and %N driving ER
 
+## Lagoon regression says %N from T and water column N are tightly correlated.. 
+# bring in the relationship to highlight the expected decline in water column N concentration
+# pair with Linda's loss of N
 
 
 bsem_model_full_syntax <- '
