@@ -451,7 +451,7 @@ posterior_Corallivore <- as_tibble(as.matrix(Corallivore_year)) %>%
 dead_coral_fish_year<-brm(fish_dead_coral~Year, data = std_data)
 posterior_dead_coral_fish <- as_tibble(as.matrix(dead_coral_fish_year)) %>%
   select(Year = b_Year)%>%
-  mutate(Parameter = "Fish benefiting from dead coral Biomass")
+  mutate(Parameter = "Herbivore/bioeroding fish biomass")
 
 # SST
 SST_year<-brm(mean_SST~Year, data = std_data)
@@ -521,7 +521,7 @@ posterior_GP <- as_tibble(as.matrix(GP_year)) %>%
 # Bring together all the posterior data
 All_posterior<-bind_rows(posterior_coral,
                          posterior_algae,
-                         posterior_fish,
+                         #posterior_fish,
                          posterior_Corallivore,
                          posterior_dead_coral_fish,
                          posterior_N,
@@ -532,9 +532,10 @@ All_posterior<-bind_rows(posterior_coral,
                          posterior_NEP,
                          posterior_C,
                          posterior_temp,
-                         posterior_GP,
+                        # posterior_GP,
                          posterior_Nwater,
-                         posterior_Pwater)
+                       #  posterior_Pwater
+                        )
 
 # make a plot showing the change in each parameter over time
 # Get the default NPG palette colors
@@ -545,7 +546,7 @@ npg_colors <- pal_npg("nrc")(10) # Default NPG palette has 10 colors
 npg_extended_palette_function <- colorRampPalette(npg_colors)
 
 # Generate 11 colors from the extended palette
-npg_11_colors <- npg_extended_palette_function(15)
+npg_11_colors <- npg_extended_palette_function(12)
 
 All_posterior %>%
   ggplot(aes(x = Year, y = fct_reorder(Parameter, Year, mean), 
@@ -607,20 +608,26 @@ get_last_non_na_per_column <- function(data_tibble) {
 
 # get the first value
 first<-get_first_non_na_per_column(Year_Averages %>%
-                              select(NP_mean, GP_mean, mean_fleshy,
+                              select(NP_mean, #GP_mean, 
+                                     mean_fleshy,
                                      mean_coral, NEC_mean_Day, Pmax, Rd,
-                                     N_percent, C_percent, mean_biomass, fish_dead_coral, Corallivore, Max_temp,
-                                     Nitrite_and_Nitrate, Phosphate))
+                                     N_percent, C_percent, #mean_biomass,
+                                     fish_dead_coral, Corallivore, Max_temp,
+                                     Nitrite_and_Nitrate #, Phosphate
+                                     ))
 first<-as_tibble(first) %>%
   mutate(Params = names(first)) %>%
   rename(first = value)
 
 
 last<-get_last_non_na_per_column(Year_Averages %>%
-                              select(NP_mean, GP_mean, mean_fleshy,
+                              select(NP_mean, #GP_mean, 
+                                     mean_fleshy,
                                      mean_coral, NEC_mean_Day, Pmax, Rd,
-                                     N_percent, C_percent, mean_biomass, fish_dead_coral, Corallivore, Max_temp,
-                                     Nitrite_and_Nitrate, Phosphate))
+                                     N_percent, C_percent, #mean_biomass, 
+                                     fish_dead_coral, Corallivore, Max_temp,
+                                     Nitrite_and_Nitrate, #Phosphate
+                                     ))
 
 last<-as_tibble(last) %>%
   mutate(Params = names(last))%>%
@@ -721,13 +728,20 @@ ggsave(here("Output","lollipop.pdf"), height = 6, width = 8)
 
 cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,
                                                      mean_fleshy, NEC_mean_Day,
-                                                     Max_temp, Rd, Pmax, mean_biomass,fish_dead_coral, Corallivore, 
-                                                     NP_mean, GP_mean, mean_coral, mean_fleshy ),
+                                                     Max_temp, Rd, Pmax, 
+                                                    # mean_biomass,
+                                                     fish_dead_coral, Corallivore, 
+                                                     NP_mean, #GP_mean, 
+                                                    mean_coral, mean_fleshy ),
                             method = "pearson")
+
 cor_p   <- rstatix::cor_pmat(Year_Averages%>% select(N_percent, C_percent, mean_coral,
                                                 mean_fleshy, NEC_mean_Day,
-                                                Max_temp, Rd, Pmax,mean_biomass, fish_dead_coral, Corallivore, 
-                                                NP_mean, GP_mean, mean_coral, mean_fleshy ),
+                                                Max_temp, Rd, Pmax,
+                                                #mean_biomass, 
+                                                fish_dead_coral, Corallivore, 
+                                                NP_mean, #GP_mean,
+                                                mean_coral, mean_fleshy ),
                              method ="pearson")
 ggcorrplot(
   cor_mat,
@@ -749,14 +763,15 @@ ct <- corr.test(Year_Averages %>%
                   mutate(log_fleshy = log(mean_fleshy),
                          log_fish = log(mean_biomass),
                          total_NEC = NEC_mean_Day+NEC_mean_Night)%>%
-                  select( NP = NP_mean, GP = GP_mean,Rd, Pmax,
+                  select( NP = NP_mean, #GP = GP_mean,
+                          Rd, Pmax,
                                           NEC=NEC_mean_Day,
                                           `%N`=N_percent, `%C`=C_percent, 
                                           `N+N`=Nitrite_and_Nitrate, 
-                                          PO = Phosphate, 
+                                         # PO = Phosphate, 
                                           `% Coral`=log_coral,
                                          `% Algae`= log_fleshy, 
-                                         `Fish` = log_fish, 
+                                        # `Fish` = log_fish, 
                                           `Herbs/eroder` = fish_dead_coral,
                                           `Corallivore` = Corallivore,
                                          `Max Temp`= Max_temp,
