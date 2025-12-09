@@ -19,13 +19,14 @@ library(ggtext)
 library(viridis)
 library(mgcv)
 library(blavaan)
-library(semPlot)
+#library(semPlot)
 library(bayesplot)
 library(ggridges)
 library(ggsci)
 library(psych)
 library(ggcorrplot)
 library(ggcorrplot2)
+
 
 ### Read in the data ######
 
@@ -84,6 +85,10 @@ insitu_temp<-read_csv(here("Data","InSituTemp.csv"))
 
 # Total Fish Biomass
 fish<-read_csv(here("Data","fish_clean.csv"))
+fish_trophic<-read_csv(here("Data","fish_summary.csv")) %>%
+  pivot_wider(names_from = trophic_new, 
+              values_from = fish_g_m2) %>%
+  select(!Other)
 
 # From 2007-2014 the PP units are in g O2/m2/h. 
 #From June 2014 on, the units are mmol O2/m2/h. So those early rates will need to be converted
@@ -400,14 +405,18 @@ Year_Averages <- Year_Averages %>%
   full_join(fish)%>% # bring in the fish biomass data
   full_join(insitu_temp) %>% # bring in the in situ temperature data
   arrange(Year) %>%
-  mutate(log_coral = log(mean_coral)) # log transform the coral data
+  mutate(log_coral = log(mean_coral)) %>% # log transform the coral data
+  rename(mean_biomass = total_fish_g_m2) %>%
+  left_join(fish_trophic) %>%
+  filter(Year <2026) %>%
+  rename(fish_dead_coral = `Benefits from dead coral`)
 
 ### How is everything changing over time ####
 
 # create a dataframe of standardized data
 std_data<- Year_Averages %>%
   select(mean_coral, mean_fleshy, Pmax, Rd, NEC_mean_Day, N_percent,
-         mean_SST, mean_biomass, NP_mean, Max_temp, GP_mean, Nitrite_and_Nitrate,
+         mean_SST, mean_biomass,fish_dead_coral, Corallivore, NP_mean, Max_temp, GP_mean, Nitrite_and_Nitrate,
          Phosphate) %>%
   mutate(across(everything(), 
                 ~as.numeric(scale(.x)))) %>%
@@ -429,7 +438,20 @@ posterior_algae <- as_tibble(as.matrix(fleshy_year)) %>%
 fish_year<-brm(mean_biomass~Year, data = std_data)
 posterior_fish <- as_tibble(as.matrix(fish_year)) %>%
   select(Year = b_Year)%>%
-  mutate(Parameter = "Fish Biomass")
+  mutate(Parameter = "Total Fish Biomass")
+
+# Corallivore biomass
+Corallivore_year<-brm(Corallivore~Year, data = std_data)
+posterior_Corallivore <- as_tibble(as.matrix(Corallivore_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Corallivore Biomass")
+
+
+# Dead coral fish biomass
+dead_coral_fish_year<-brm(fish_dead_coral~Year, data = std_data)
+posterior_dead_coral_fish <- as_tibble(as.matrix(dead_coral_fish_year)) %>%
+  select(Year = b_Year)%>%
+  mutate(Parameter = "Fish benefiting from dead coral Biomass")
 
 # SST
 SST_year<-brm(mean_SST~Year, data = std_data)
@@ -500,6 +522,8 @@ posterior_GP <- as_tibble(as.matrix(GP_year)) %>%
 All_posterior<-bind_rows(posterior_coral,
                          posterior_algae,
                          posterior_fish,
+                         posterior_Corallivore,
+                         posterior_dead_coral_fish,
                          posterior_N,
                          posterior_Rd,
                          posterior_Pmax,
@@ -521,7 +545,7 @@ npg_colors <- pal_npg("nrc")(10) # Default NPG palette has 10 colors
 npg_extended_palette_function <- colorRampPalette(npg_colors)
 
 # Generate 11 colors from the extended palette
-npg_11_colors <- npg_extended_palette_function(13)
+npg_11_colors <- npg_extended_palette_function(15)
 
 All_posterior %>%
   ggplot(aes(x = Year, y = fct_reorder(Parameter, Year, mean), 
@@ -585,7 +609,7 @@ get_last_non_na_per_column <- function(data_tibble) {
 first<-get_first_non_na_per_column(Year_Averages %>%
                               select(NP_mean, GP_mean, mean_fleshy,
                                      mean_coral, NEC_mean_Day, Pmax, Rd,
-                                     N_percent, C_percent, mean_biomass, Max_temp,
+                                     N_percent, C_percent, mean_biomass, fish_dead_coral, Corallivore, Max_temp,
                                      Nitrite_and_Nitrate, Phosphate))
 first<-as_tibble(first) %>%
   mutate(Params = names(first)) %>%
@@ -595,7 +619,7 @@ first<-as_tibble(first) %>%
 last<-get_last_non_na_per_column(Year_Averages %>%
                               select(NP_mean, GP_mean, mean_fleshy,
                                      mean_coral, NEC_mean_Day, Pmax, Rd,
-                                     N_percent, C_percent, mean_biomass, Max_temp,
+                                     N_percent, C_percent, mean_biomass, fish_dead_coral, Corallivore, Max_temp,
                                      Nitrite_and_Nitrate, Phosphate))
 
 last<-as_tibble(last) %>%
@@ -631,6 +655,8 @@ Per_change_var <- first %>%
                                Params== "NP_mean" ~ "Net Ecosystem Production",
                                Params== "Max_temp" ~ "Max Temperature",
                                Params== "mean_biomass"~ "Fish Biomass",
+                               Params== "fish_dead_coral"~ "Hebivore/bioeroding fish",
+                               Params == "Corallivore"~"Corallivore",
                                Params== "C_percent" ~ "% C Content",
                                Params== "Pmax" ~ "Maximum Photosynthetic Capacity",
                                Params== "GP_mean" ~ "Gross Ecosystem Production",
@@ -649,7 +675,7 @@ Per_change_var <- first %>%
 Num_years<-Year_Averages %>%
   select(NP_mean, GP_mean, mean_fleshy,
          mean_coral, NEC_mean_Day, Pmax, Rd,
-         N_percent, C_percent, mean_biomass, Max_temp,
+         N_percent, C_percent, mean_biomass,Corallivore, fish_dead_coral, Max_temp,
          Nitrite_and_Nitrate, Phosphate) %>%
   summarise_all(.funs = function(x){sum(!is.na(x))}) %>%
   pivot_longer(NP_mean:Phosphate) %>%
@@ -658,15 +684,17 @@ Num_years<-Year_Averages %>%
 
 Per_change_var %>%
   left_join(Num_years) %>%
-  mutate(nicenames = factor(nicenames, levels = c("% Macroalgae Cover",
+  mutate(nicenames = factor(nicenames, levels = c("Hebivore/bioeroding fish",
+                                                  "% Macroalgae Cover",
+                                                  "Fish Biomass",
                                                   "Net Ecosystem Production",
                                                   "Max Temperature",
-                                                  "Fish Biomass",
                                                   "Gross Ecosystem Production",
                                                   "Phosphate",
                                                   "Maximum Photosynthetic Capacity",
                                                   "Net Ecosystem Calcification",
                                                   "Ecosystem Respirataion",
+                                                  "Corallivore",
                                                   "% Coral Cover",
                                                   "%N Content",
                                                   "% C Content",
@@ -693,12 +721,12 @@ ggsave(here("Output","lollipop.pdf"), height = 6, width = 8)
 
 cor_mat <- rstatix::cor_mat(Year_Averages %>% select(N_percent, C_percent, mean_coral,
                                                      mean_fleshy, NEC_mean_Day,
-                                                     Max_temp, Rd, Pmax, mean_biomass, 
+                                                     Max_temp, Rd, Pmax, mean_biomass,fish_dead_coral, Corallivore, 
                                                      NP_mean, GP_mean, mean_coral, mean_fleshy ),
                             method = "pearson")
 cor_p   <- rstatix::cor_pmat(Year_Averages%>% select(N_percent, C_percent, mean_coral,
                                                 mean_fleshy, NEC_mean_Day,
-                                                Max_temp, Rd, Pmax,mean_biomass, 
+                                                Max_temp, Rd, Pmax,mean_biomass, fish_dead_coral, Corallivore, 
                                                 NP_mean, GP_mean, mean_coral, mean_fleshy ),
                              method ="pearson")
 ggcorrplot(
@@ -729,15 +757,14 @@ ct <- corr.test(Year_Averages %>%
                                           `% Coral`=log_coral,
                                          `% Algae`= log_fleshy, 
                                          `Fish` = log_fish, 
+                                          `Herbs/eroder` = fish_dead_coral,
+                                          `Corallivore` = Corallivore,
                                          `Max Temp`= Max_temp,
                                           `Current Speed` = Flow_mean
                                         ), adjust = "none")
 corr <- ct$r
 p.mat <- ct$p
 
-
-
-  
 ggcorrplot.mixed(corr, 
                  upper = "ellipse", 
                  lower = "number", 
@@ -781,7 +808,8 @@ sem_data <- Year_Averages  %>%
          log_alive = log(mean_alive),
          log_fish = log(mean_biomass))%>%
     select(mean_coral, mean_fleshy, Pmax, GP_mean, Rd, NEC_mean_Day, N_percent,
-           Flow_mean, Max_temp, mean_alive, log_coral, mean_biomass,log_fish,
+           Flow_mean, Max_temp, mean_alive, log_coral, 
+           mean_biomass,log_fish,fish_dead_coral, Corallivore,
            log_fleshy, log_alive, C_percent) %>%
 #  mutate(across(everything(), 
 #                ~ residuals(gam(.x ~ s(Year, k=3), data = Year_Averages, na.action = na.exclude)))) %>%
@@ -798,9 +826,13 @@ bsem_model_full_syntax <- '
   # LEVEL 2: Metabolic Rate Models
   # GPP is driven by the producers (corals, algae) and abiotic factors
   Pmax ~ c1*log_coral +c3*Max_temp
-  # ER is driven by all respiring organisms and abiotic factors
-  Rd ~ r1*log_coral +r2*log_fish+r3*Max_temp
+  # ER is driven by all respiring organisms and abiotic factors (removed r2* log fish)
+  Rd ~ r1*log_coral +r3*Max_temp
 
+  # Community models:
+  fish_dead_coral~f1*log_fleshy
+  Corallivore~f2*log_coral
+  
   # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
   # Nutrient recycling is driven by mean coral cover
   N_percent  ~ n1*log_coral
@@ -858,29 +890,29 @@ plot(bsem_fit_full, plot.type = "dens")
 # Plot the posterior areas for a selection of parameters
 #mcmc_areas(mcmc_samples, pars = c("l1","c1","c3","r1","r2","r3","n1"), prob = 0.9, prob_outer = 0.95)
 
-fitmeasures(bsem_fit_full)
-
-# Plot the path diagram for the fitted model
-semPaths(bsem_fit_full, what = "est", 
-         layout = "spring", edge.label.cex = 1.2, 
-         intercepts = FALSE, residuals = FALSE)
+# fitmeasures(bsem_fit_full)
+# 
+# # Plot the path diagram for the fitted model
+# semPaths(bsem_fit_full, what = "est", 
+#          layout = "spring", edge.label.cex = 1.2, 
+#          intercepts = FALSE, residuals = FALSE)
 ########## STOPPED HERE ###############
 
 
 
 # The path diagram will be more complex, so a different layout might be better.
-semPaths(bsem_fit_full, 
-         what = "est",
-         whatLabels = "est",
-         layout = "spring", # "spring" layout handles web-like structures well
-         edge.label.cex = 1.1,
-         fade = TRUE,
-         residuals = FALSE, # Show residuals to see unexplained variance
-         nCharNodes = 0,
-         sizeMan = 10,
-         style = "lisrel",
-         title = TRUE,
-         main = "Expanded Bayesian SEM of Reef Ecosystem Drivers")
+# semPaths(bsem_fit_full, 
+#          what = "est",
+#          whatLabels = "est",
+#          layout = "spring", # "spring" layout handles web-like structures well
+#          edge.label.cex = 1.1,
+#          fade = TRUE,
+#          residuals = FALSE, # Show residuals to see unexplained variance
+#          nCharNodes = 0,
+#          sizeMan = 10,
+#          style = "lisrel",
+#          title = TRUE,
+#          main = "Expanded Bayesian SEM of Reef Ecosystem Drivers")
 
 ### SImple model with SST driving coral and coral driving %N and %N driving ER
 
