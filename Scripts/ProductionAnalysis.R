@@ -864,14 +864,16 @@ bsem_model_full_syntax <- '
   # coral to percent N via ER
   #coral_ER_N:=n1*r1
   #Temperature to Rd via coral -- compare to c3 direct effect of temp on Rd
-  Temp_to_R:=l1*r1
-  Temp_to_Pmax:=l1*c1
-  Temp_to_N:=l1*n1
+ # Temp_to_R:=l1*r1
+#  Temp_to_Pmax:=l1*c1
+#  Temp_to_N:=l1*n1
 '
 
 # --- 3. Fit the Full Bayesian SEM ---
 
 ### Need to standardize these still by centering the residuals above
+#my_prior <- set_prior("normal(0, 2)", class = "b")
+
 bsem_fit_full <- bsem(
   model = bsem_model_full_syntax,
   data = sem_data,
@@ -882,13 +884,15 @@ bsem_fit_full <- bsem(
      #      log_fish = log(mean_biomass)),
   n.chains = 3,
   sample = 10000,      # Increased iterations for a more complex model
-  burnin = 2000,
+  burnin = 5000,
   std.lv = TRUE,
   seed = 11,
   em.h1.iter.max = 5000,
-  control = list(adapt_delta = 0.99, max_treedepth = 18)
+  control = list(adapt_delta = 0.99, max_treedepth = 18),
+  dp = dpriors(alpha = "normal(0,2)", beta = "normal(0,2)")
 )
 
+# https://www.martinmodrak.cz/2018/02/19/taming-divergences-in-stan-models/
 # --- 4. Interpret and Visualize ---
 summary(bsem_fit_full, fit.measures = TRUE, ci = TRUE)
 
