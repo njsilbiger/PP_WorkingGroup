@@ -850,7 +850,7 @@ bsem_model_full_syntax <- '
   
   # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
   # Nutrient recycling is driven by mean coral cover
-  N_percent  ~ n1*log_coral
+  N_percent  ~ n1*Rd
   # Calcification is driven by calcifiers and gross photosynthesis
 #  NEC_mean_Day  ~ nc2*GP_mean 
 
