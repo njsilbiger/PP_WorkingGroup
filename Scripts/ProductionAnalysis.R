@@ -26,6 +26,7 @@ library(ggsci)
 library(psych)
 library(ggcorrplot)
 library(ggcorrplot2)
+library(ggeffects)
 
 
 ### Read in the data ######
@@ -789,14 +790,14 @@ ggcorrplot.mixed(corr,
 
 ggsave(here("Output","correlations.pdf"), width = 10, height = 10)
 ## Use a GAM to test how different variables affect ER while controlling for the underlying time trend
-model_ER_full <- gam(Rd ~ s(Year, k=5) + s(log(mean_coral), k=5) + s(Flow_mean, k=5) + 
-                       s(Temperature_mean, k=5) +s(N_percent, k=5), 
+model_ER_full <- gam(log(Rd) ~ s(Year, k=5) + s(log(mean_coral), k=5)  + 
+                       s(Temperature_mean, k=5) , 
                      data = Year_Averages, method = "REML")
 summary(model_ER_full)
 gratia::draw(model_ER_full, residuals = TRUE)
 
-model_Pmax_full <- gam(Pmax ~ s(Year, k=5) + s(log(mean_coral), k=5) + s(Flow_mean, k=5) + 
-                       s(Temperature_mean, k=5) +s(N_percent), 
+model_Pmax_full <- gam(log(Pmax) ~ s(Year, k=5) + s(log(mean_coral), k=5) +
+                       s(Temperature_mean, k=5), 
                      data = Year_Averages, method = "REML")
 summary(model_Pmax_full)
 gratia::draw(model_Pmax_full, residuals = TRUE)
@@ -821,11 +822,13 @@ sem_data <- Year_Averages  %>%
   drop_na(mean_coral) %>%
   mutate(log_fleshy = log(mean_fleshy),
          log_alive = log(mean_alive),
-         log_fish = log(mean_biomass))%>%
+         log_fish = log(mean_biomass),
+         log_rd = log(Rd),
+         log_pmax = log(Pmax))%>%
     select(mean_coral, mean_fleshy, Pmax, GP_mean, Rd, NEC_mean_Day, N_percent,
            Flow_mean, Max_temp, mean_alive, log_coral, 
            mean_biomass,log_fish,fish_dead_coral, Corallivore,
-           log_fleshy, log_alive, C_percent) %>%
+           log_fleshy, log_alive, C_percent, log_pmax, log_rd) %>%
 #  mutate(across(everything(), 
 #                ~ residuals(gam(.x ~ s(Year, k=3), data = Year_Averages, na.action = na.exclude)))) %>%
   mutate(across(everything(), # scale the data
@@ -840,9 +843,9 @@ bsem_model_full_syntax <- '
   
   # LEVEL 2: Metabolic Rate Models
   # GPP is driven by the producers (corals, algae) and abiotic factors
-  Pmax ~ c1*log_coral +c3*Max_temp
+  log_pmax ~ c1*log_coral +c3*Max_temp
   # ER is driven by all respiring organisms and abiotic factors (removed r2* log fish)
-  Rd ~ r1*log_coral +r3*Max_temp
+  log_rd ~ r1*log_coral +r3*Max_temp
 
   # Community models:
   fish_dead_coral~f1*log_fleshy
@@ -850,13 +853,13 @@ bsem_model_full_syntax <- '
   
   # LEVEL 3: Ecosystem Function Models (Original Hypotheses)
   # Nutrient recycling is driven by mean coral cover
-  N_percent  ~ n1*Rd
+  N_percent  ~ n1*log_rd
   # Calcification is driven by calcifiers and gross photosynthesis
 #  NEC_mean_Day  ~ nc2*GP_mean 
 
   # COVARIANCES: Allow unexplained parts of external drivers to correlate
  #Temperature_mean ~~ Flow_mean
- Pmax ~~ Rd
+ log_pmax ~~ log_rd
  log_coral~~log_fleshy
   # N_percent~~C_percent
   
@@ -889,7 +892,8 @@ bsem_fit_full <- bsem(
   seed = 11,
   em.h1.iter.max = 5000,
   control = list(adapt_delta = 0.99, max_treedepth = 18),
-  dp = dpriors(alpha = "normal(0,2)", beta = "normal(0,2)")
+  dp = dpriors(alpha = "normal(0,3)", beta = "normal(0,2)", 
+               rho = "beta(1,1)", psi = "gamma(1,0.5)[sd]")
 )
 
 # https://www.martinmodrak.cz/2018/02/19/taming-divergences-in-stan-models/
@@ -904,12 +908,70 @@ plot(ppmc_res)
 
 plot(bsem_fit_full, plot.type = "dens")
 
-# Extract posterior samples
-#mcmc_samples <- as.matrix(blavInspect(bsem_fit_full, 'mcmc'))
-# Plot the posterior areas for a selection of parameters
-#mcmc_areas(mcmc_samples, pars = c("l1","c1","c3","r1","r2","r3","n1"), prob = 0.9, prob_outer = 0.95)
+# prepare a null model
+model_null <- '
+log_coral ~~ log_coral 
+Max_temp ~~ Max_temp 
+log_pmax ~~ log_pmax
+log_rd ~~ log_rd
+log_fleshy ~~ log_fleshy
+fish_dead_coral ~~ fish_dead_coral
+Corallivore ~~ Corallivore
+N_percent ~~ N_percent
+'
+bsem_null <- bsem(
+  model = model_null,
+  data = sem_data,
+  # Year_Averages  %>% 
+  #  drop_na(mean_coral) %>%
+  # mutate(log_fleshy = log(mean_fleshy),
+  #       log_alive = log(mean_alive),
+  #      log_fish = log(mean_biomass)),
+  n.chains = 3,
+  sample = 10000,      # Increased iterations for a more complex model
+  burnin = 5000,
+  std.lv = TRUE,
+  seed = 11,
+  em.h1.iter.max = 5000,
+  control = list(adapt_delta = 0.99, max_treedepth = 18),
+  dp = dpriors(alpha = "normal(0,3)", beta = "normal(0,2)", 
+               rho = "beta(1,1)", psi = "gamma(1,0.5)[sd]")
+)
 
-# fitmeasures(bsem_fit_full)
+# compare to null model
+gl_fits_all <- blavFitIndices(bsem_fit_full, baseline.model = bsem_null, rescale = "MCMC")
+summary(gl_fits_all, central.tendency = c("mean","median","mode"), prob = .90)
+
+# Extract posterior samples
+mcmc_samples <- as.matrix(blavInspect(bsem_fit_full, 'mcmc'))
+# Plot the posterior areas for a selection of parameters
+mcmc_areas(mcmc_samples, pars = c("l1","c1","c3","r1","r3","f1","f2","n1","log_coral~~log_fleshy","log_pmax~~log_rd"), prob = 0.95, prob_outer = 0.95)
+
+mcmc_data<-as_tibble(mcmc_samples)
+
+mcmc_data %>% 
+  ggplot(aes(x = l1))+ 
+  stat_halfeye(point_interval=median_hdi, .width=c(.95, .75), 
+               fatten_point = 2, slab_alpha = 0.6, fill = scales::alpha("#009E73",0.3)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  theme_bw() + 
+  xlab("")+
+  ylab("")+
+  theme(panel.grid.major = element_blank(), # remove gridlines
+        panel.grid.minor = element_blank(), #remove gridlines
+        strip.background = element_blank(), 
+        legend.position = "none",  
+        rect = element_rect(fill = "transparent"),  
+        plot.background = element_rect(fill = "transparent", color = NA),
+        #  text=element_text(size=16,  family="sans"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+blavPredict(bsem_fit_full)
+
+# Get effects for your blavaan model (e.g., a latent variable)
+preds <- ggpredict(bsem_fit_full, terms = c("log_coral","log_rd"), type = "fixed")
+plot(preds)
 # 
 # # Plot the path diagram for the fitted model
 # semPaths(bsem_fit_full, what = "est", 
@@ -947,21 +1009,22 @@ plot(bsem_fit_full, plot.type = "dens")
 semdata2<-Year_Averages %>%
   mutate( logfleshy = log(mean_fleshy),
           logfish = log(mean_biomass),
+          logrd = log(Rd),
+          logpmax = log(Pmax),
           Rd =-R_mean,
-          NEC = NEC_mean_Day+NEC_mean_Night,)%>%
-  select(meancoral = mean_coral, 
+          NEC = NEC_mean_Day+NEC_mean_Night)%>%
+  select(Year,meancoral = mean_coral, 
          meanfleshy = mean_fleshy,
-         temperature = Temperature_mean,
+         temperature = Max_temp,
          flow = Flow_mean,
          Npercent = N_percent,
          fish = mean_biomass,
          GP = GP_mean,
-         Rd,
-         NEC,
+         logrd,logpmax,
          logcoral = log_coral,
-         logfleshy, logfish
+         logfleshy, logfish, Corallivore, herbs = fish_dead_coral
         ) %>%
-  drop_na(meancoral) %>%
+  drop_na(logcoral) %>%
   mutate(across(everything(), # scale the data
                 ~as.numeric(scale(.x)))) 
 
@@ -981,68 +1044,50 @@ sem_data2 <-sem_data %>%
 # SEM with smooth terms + mi()
 # ----------------------------
 
-bf_coral<-bf(
-  logcoral |mi() ~1 + MaxTemp
+# imputation for missing temp data
+bf_temp <- bf(
+  temperature | mi() ~ 1 + Year
+)
+# temp drives coral cover
+bf_coraltemp <- bf(
+  logcoral | mi() ~ 1 + mi(temperature)
 )
 
-# GP submodel: smooths for all predictors
-bf_gp <- bf(
-  GP | mi() ~ 1 +
-    s(meancoral,        k = 5) +
-    s(meanfleshy,       k = 5) +
-    s(temperature,  k = 5) +
-    s(flow,         k = 5) +
-    s(Npercent,         k = 4)
+# LEVEL 2: Metabolic Rate Models
+# GPP is driven by the producers (corals, algae) and abiotic factors
+bf_logpmax <- bf(
+  logpmax | mi() ~ 1 +logcoral+ mi(temperature)
 )
 
-bf_gp <- bf(
-  Pmax | mi() ~ 1 + logcoral+ MaxTemp +Npercent
+# ER is driven by all respiring organisms and abiotic factors (removed r2* log fish)
+
+bf_logrd <- bf(
+  logrd | mi() ~ 1 +logcoral+ mi(temperature)
+)
+# Community models:
+bf_herbs <- bf(
+  herbs | mi() ~ 1 +logfleshy
 )
 
-# Rd submodel: smooths for all predictors
-bf_rd <- bf(
-  Rd | mi() ~ 1 +
-    s(meancoral,        k = 5) +
-    s(fish,      k = 5) +
-    s(temperature,  k = 5) +
-    s(flow,         k = 5)
+bf_corallivore <- bf(
+  Corallivore | mi() ~ 1 +logcoral
 )
 
-bf_rd <- bf(
-  Rd | mi() ~ 1 + logcoral + logfish + MaxTemp
+
+# LEVEL 3: Ecosystem Function Models (Original Hypotheses)
+# Nutrient recycling is driven by mean coral cover to Rd
+bf_nutrients<- bf(
+  Npercent | mi() ~ 1 +mi(logrd)
 )
 
-# N% submodel: smooth coral cover
-bf_n <- bf(
-  Npercent | mi() ~ 1 +
-    s(meancoral,        k = 5)
-)
 
-bf_n <- bf(
-  Npercent | mi() ~ 1 + logcoral
-)
-# NEC submodel: smooth coral cover and (imputed) GP
-# Note: use mi(GP_mean) here because GP_mean is a modeled node with missingness
-bf_nec <- bf(
-  NEC | mi() ~ 1 +
-    s(meancoral,        k = 5) +
-    s(GP,           k = 5)+
-    s(temperature,           k = 5)
-   
-)
+# COVARIANCES: Allow unexplained parts of external drivers to correlate
+#Temperature_mean ~~ Flow_mean
+#log_pmax ~~ log_rd
+#log_coral~~log_fleshy
 
-bf_nec <- bf(
-  NEC | mi() ~ 1 +
-    s(meancoral,        k = 5) +
-    s(GP,           k = 5)+
-    s(temperature,           k = 5)
-  
-)
+# algae and coral are correlated
 
-bf_nec <- bf(
-  NEC | mi() ~ 1 + logcoral+ GP+temperature +I(temperature^2)
-  
-)
 
 # ----------------------------
 # Auxiliary imputation models
@@ -1058,46 +1103,234 @@ bf_biomass <- bf(fish     | mi() ~ 1)
 # Fit
 # ----------------------------
 brms_sem_full <- brm(
-  bf_coral+bf_gp + bf_rd + bf_n +
+  bf_temp+bf_coraltemp+bf_logpmax + bf_logrd + bf_herbs +bf_corallivore+bf_nutrients + bf_fleshy+
   set_rescor(TRUE),             # residual correlations among responses
-  data = sem_data2,
+  data = semdata2,
   chains = 3,
   iter = 10000,
-  warmup = 2000,
+  warmup = 5000,
   seed = 11,
   sample_prior = "no",
-  family = student()
+  prior = c(set_prior("normal(0, 2)", class = "b"),
+            set_prior("normal(0, 0.25)", resp = "temperature", class = "sigma", lb = 0),
+            set_prior("normal(0, 2)", class = "Intercept")),
+  control = list(adapt_delta = 0.99, max_treedepth = 15),
+  family = gaussian()
 )
 
+summary(brms_sem_full) # Rhat and ESS good for everything
+# look at the trace plots
+plot(brms_sem_full) # looks good
+# look at PP checks (looks good)
+pp_check(brms_sem_full, resp = "temperature")
+pp_check(brms_sem_full, resp = "herbs")
+pp_check(brms_sem_full, resp = "logcoral")
+pp_check(brms_sem_full, resp = "Npercent")
+pp_check(brms_sem_full, resp = "logpmax")
+pp_check(brms_sem_full, resp = "logrd")
 
-gp_edges<-as_tibble(fixef(brms_gp)) %>%
-  mutate(coef =rownames(fixef(brms_gp))) %>%
-  filter(coef != "Intercept") %>%
-  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)
+# plot all the posteriors
+brms_sem_full %>%
+  spread_draws(`b.*`, regex = TRUE) %>%
+  select(b_temperature_Year, b_logpmax_logcoral,b_logrd_logcoral,b_herbs_logfleshy,
+         b_Corallivore_logcoral, bsp_logcoral_mitemperature, bsp_logpmax_mitemperature,
+         bsp_logrd_mitemperature, bsp_Npercent_milogrd) %>%
+  pivot_longer(cols = b_temperature_Year:bsp_Npercent_milogrd)%>%
+  ggplot(aes(x = value, y = name))+
+  stat_halfeye(point_interval=median_hdi, .width=c(.95, .75), 
+               fatten_point = 2, slab_alpha = 0.6, fill = scales::alpha("#009E73",0.6)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+#  facet_wrap(~name, ncol = 1)+
+  theme_bw() + 
+  xlab("")+
+  ylab("")+
+  theme(panel.grid.major = element_blank(), # remove gridlines
+        panel.grid.minor = element_blank(), #remove gridlines
+        strip.background = element_blank(), 
+        legend.position = "none",  
+        rect = element_rect(fill = "transparent"),  
+        plot.background = element_rect(fill = "transparent", color = NA),
+      #  axis.text.y = element_blank(),
+       # axis.ticks.y = element_blank()
+        )
+
+# get the nonscaled values for the model
+Yearmodelvalues<-Year_Averages %>%
+  mutate( logfleshy = log(mean_fleshy),
+          logfish = log(mean_biomass),
+          logrd = log(Rd),
+          logpmax = log(Pmax),
+          Rd =-R_mean,
+          NEC = NEC_mean_Day+NEC_mean_Night)%>%
+  select(Year,meancoral = mean_coral, 
+         meanfleshy = mean_fleshy,
+         temperature = Max_temp,
+         flow = Flow_mean,
+         Npercent = N_percent,
+         fish = mean_biomass,
+         GP = GP_mean,
+         logrd,logpmax,
+         logcoral = log_coral,
+         logfleshy, logfish, Corallivore, herbs = fish_dead_coral
+  ) %>%
+  drop_na(logcoral)
+
+# get the means and SD to unscale the plots
+modelmean<-Yearmodelvalues%>%
+  mutate(across(everything(), # scale the data
+                ~as.numeric(mean(.x, na.rm = TRUE)))) %>%
+  distinct()
+
+modelsd<-Yearmodelvalues%>%
+  mutate(across(everything(), # scale the data
+                ~as.numeric(sd(.x, na.rm = TRUE)))) %>%
+  distinct()
+
+# set the theme for everything
+theme_regression<-
+  theme_bw()+
+  theme(text = element_text(size = 14, family = "Arial"),
+        rect = element_rect(fill = "transparent"),  
+        plot.background = element_rect(fill = "transparent", color = NA)
+  )
+
+theme_set(theme_regression) 
+
+coral_temp<-conditional_effects(brms_sem_full, resp = "logcoral", effects = "temperature") 
+ct_plot<-as_tibble(coral_temp$logcoral.logcoral_temperature) %>%
+  mutate(temperature = temperature*modelsd$temperature+modelmean$temperature,
+         estimate__ = exp(estimate__*modelsd$logcoral+modelmean$logcoral),
+         lower__ = exp(lower__*modelsd$logcoral+modelmean$logcoral),
+         upper__ = exp(upper__*modelsd$logcoral+modelmean$logcoral))  %>% # unscale the data
+  ggplot(aes(x = temperature, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = Max_temp, y = exp(log_coral)), alpha = 0.5)+
+  coord_trans(y = "log")+
+  scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(x = expression("Temperature ("*degree*"C)"),
+       y = "Coral Cover (%)")
+  
+  ### Temperature Year
+temp_year<-conditional_effects(brms_sem_full, resp = "temperature", effects = "Year") 
+ty_plot<-as_tibble(temp_year$temperature.temperature_Year) %>%
+  mutate(Year = Year*modelsd$Year+modelmean$Year,
+         estimate__ = estimate__*modelsd$temperature+modelmean$temperature,
+         lower__ = lower__*modelsd$temperature+modelmean$temperature,
+         upper__ = upper__*modelsd$temperature+modelmean$temperature)  %>% # unscale the data
+  ggplot(aes(x = Year, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = Year, y = Max_temp), alpha = 0.5)+
+  #coord_trans(y = "log")+
+ # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(y = expression("Temperature ("*degree*"C)"),
+       x = "Year")
+
+
+# log Pmax ~ coral and temperature
+pmax_coral<-conditional_effects(brms_sem_full, resp = "logpmax", effects = "logcoral") 
+pc_plot<-as_tibble(pmax_coral$logpmax.logpmax_logcoral) %>%
+  mutate(logcoral = exp(logcoral*modelsd$logcoral+modelmean$logcoral),
+         estimate__ = exp(estimate__*modelsd$logpmax+modelmean$logpmax),
+         lower__ = exp(lower__*modelsd$logpmax+modelmean$logpmax),
+         upper__ = exp(upper__*modelsd$logpmax+modelmean$logpmax) ) %>% # unscale the data
+  ggplot(aes(x = logcoral, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = exp(log_coral), y = Pmax), alpha = 0.5)+
+  coord_trans(x = "log", y = "log")+
+  # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(y = expression("Pmax (mmol O"[2]*" m"^2*" hr"^-1*")"),
+       x = "Coral (%)")
+
+# log Rd ~ coral and temperature
+rd_coral<-conditional_effects(brms_sem_full, resp = "logrd", effects = "logcoral") 
+rc_plot<-as_tibble(rd_coral$logrd.logrd_logcoral) %>%
+  mutate(logcoral = exp(logcoral*modelsd$logcoral+modelmean$logcoral),
+         estimate__ = exp(estimate__*modelsd$logrd+modelmean$logrd),
+         lower__ = exp(lower__*modelsd$logrd+modelmean$logrd),
+         upper__ = exp(upper__*modelsd$logrd+modelmean$logrd) ) %>% # unscale the data
+  ggplot(aes(x = logcoral, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = exp(log_coral), y = Rd), alpha = 0.5)+
+  coord_trans(x = "log", y = "log")+
+  # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(y = expression("Ecosystem Respiration (mmol O"[2]*" m"^2*" hr"^-1*")"),
+       x = "Coral (%)")
+
+# herbs ~ log fleshy
+herbs_fleshy<-conditional_effects(brms_sem_full, resp = "herbs", effects = "logfleshy") 
+hf_plot<-as_tibble(herbs_fleshy$herbs.herbs_logfleshy) %>%
+  mutate(logfleshy = exp(logfleshy*modelsd$logfleshy+modelmean$logfleshy),
+         estimate__ = estimate__*modelsd$herbs+modelmean$herbs,
+         lower__ = lower__*modelsd$herbs+modelmean$herbs,
+         upper__ = upper__*modelsd$herbs+modelmean$herbs ) %>% # unscale the data
+  ggplot(aes(x = logfleshy, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = mean_fleshy, y = fish_dead_coral), alpha = 0.5)+
+  coord_trans(x = "log")+
+  # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(y = expression("Herbivore Fish Biomass (g m "^-1*")"),
+       x = "Fleshy Macroalgae (%)")
+
+# corallivore ~ corals
+corallivore_coral<-conditional_effects(brms_sem_full, resp = "Corallivore", effects = "logcoral") 
+cc_plot<-as_tibble(corallivore_coral$Corallivore.Corallivore_logcoral) %>%
+  mutate(logcoral = exp(logcoral *modelsd$logcoral +modelmean$logcoral ),
+         estimate__ = estimate__*modelsd$Corallivore+modelmean$Corallivore,
+         lower__ = lower__*modelsd$Corallivore+modelmean$Corallivore,
+         upper__ = upper__*modelsd$Corallivore+modelmean$Corallivore ) %>% # unscale the data
+  ggplot(aes(x = logcoral , y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = exp(log_coral), y = Corallivore), alpha = 0.5)+
+  coord_trans(x = "log")+
+  # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(y = expression("Corallivore Fish Biomass (g m "^-1*")"),
+       x = "Coral Cover (%)")
+
+# N% ~ respiration
+N_Rd<-conditional_effects(brms_sem_full, resp = "Npercent", effects = "logrd") 
+nr_plot<-as_tibble(N_Rd$Npercent.Npercent_logrd) %>%
+  mutate(logrd = exp(logrd*modelsd$logrd+modelmean$logrd),
+         estimate__ = estimate__*modelsd$Npercent+modelmean$Npercent,
+         lower__ = lower__*modelsd$Npercent+modelmean$Npercent,
+         upper__ = upper__*modelsd$Npercent+modelmean$Npercent ) %>% # unscale the data
+  ggplot(aes(x = logrd, y = estimate__))+
+  geom_line(linewidth = 1)+
+  geom_ribbon(aes(ymin =lower__, ymax =  upper__), alpha = 0.25, fill = "#67bed9")+
+  geom_point(data = Year_Averages, aes(x = Rd, y = N_percent), alpha = 0.5)+
+  coord_trans(x = "log", y = "log")+
+  # scale_y_continuous(breaks = c(1,5,10,20,50,100))+
+  labs(x = expression("Ecosystem Respiration (mmol O"[2]*" m"^2*" hr"^-1*")"),
+       y = "Nitrogen Content (%)")
+
+
+nr_plot/rc_plot/hf_plot/cc_plot/ct_plot/ty_plot
+
+#########
+gp_edges<-as_tibble(fixef(brms_sem_full)) %>%
+  mutate(coef =rownames(fixef(brms_sem_full))) %>%
+  separate(col = coef, into = c("resp","pred"))%>%
+  filter(pred != "Intercept") %>%
+  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)%>%
+  mutate(sig = ifelse(sign(lo)==sign(hi),1,0.5)) # determine significance
 
 gp_edges %>%
-  ggplot(aes(x = est, y = coef))+
-  geom_point()+
-  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0)+
+  ggplot(aes(x = est, y = pred))+
+  geom_point(size = 3, color = "firebrick", aes(alpha = sig))+
+  geom_errorbarh(aes(xmin = lo, xmax = hi,alpha = sig), height = 0, color = "firebrick")+
   geom_vline(xintercept = 0)+
-  theme_minimal()
-
-
-edges<-as_tibble(fixef(brms_sem_full)) %>%
-  mutate(coef =rownames(fixef(brms_sem_full))) %>%
-  separate(coef, sep ="_", into = c("to","from","none")) %>%
-  select(!none) %>%
-  filter(from != "Intercept") %>%
-  mutate(from = str_sub(from, start = 2)) %>% # remove the letter s
-  rename(est = Estimate, lo = `Q2.5`, hi = `Q97.5`)
-
-edges %>%
-  ggplot(aes(x = est, y = from))+
-  geom_point()+
-  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0)+
-  geom_vline(xintercept = 0)+
-  facet_wrap(~to, scale = "free_y") +
-  theme_minimal()
+  scale_alpha(range = c(0.25,1))+
+  labs(x = "Standardized Effect Size",
+       y = "Predictor Variables")+
+  theme_minimal()+
+  facet_wrap(~resp, nrow = 1)+
+  theme(text = element_text(size = 14),
+        legend.position = "none")
 
 
 ## get the correlated errors
