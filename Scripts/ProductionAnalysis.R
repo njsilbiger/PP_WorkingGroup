@@ -529,9 +529,9 @@ All_posterior<-bind_rows(posterior_coral,
                          posterior_Rd,
                          posterior_Pmax,
                          #posterior_sst,
-                         posterior_NEC,
+                         #posterior_NEC,
                          posterior_NEP,
-                         posterior_C,
+                        # posterior_C,
                          posterior_temp,
                         # posterior_GP,
                          posterior_Nwater,
@@ -766,8 +766,9 @@ ct <- corr.test(Year_Averages %>%
                          total_NEC = NEC_mean_Day+NEC_mean_Night)%>%
                   select( NP = NP_mean, #GP = GP_mean,
                           Rd, Pmax,
-                                          NEC=NEC_mean_Day,
-                                          `%N`=N_percent, `%C`=C_percent, 
+                                          #NEC=NEC_mean_Day,
+                                          `%N`=N_percent, 
+                                          #`%C`=C_percent, 
                                           `N+N`=Nitrite_and_Nitrate, 
                                          # PO = Phosphate, 
                                           `% Coral`=log_coral,
@@ -776,7 +777,7 @@ ct <- corr.test(Year_Averages %>%
                                           `Herbs/eroder` = fish_dead_coral,
                                           `Corallivore` = Corallivore,
                                          `Max Temp`= Max_temp,
-                                          `Current Speed` = Flow_mean
+                                          #`Current Speed` = Flow_mean
                                         ), adjust = "none")
 corr <- ct$r
 p.mat <- ct$p
